@@ -812,15 +812,15 @@ GSingleInv3NodeCycleOnlyRWWR ==
     )
 
 \* 3 node cycle with exactly one RW edge, one WW edge, and one WR edge
-ThreeNodeCycleRWWRWW == 
+ThreeNodeCycle == 
     ~(
       /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) = 3
       /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 3
       /\ \E a,b,c \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
         /\ Cardinality({a,b,c}) = 3
-        /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<b, c, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<c, a, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
+        \* /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
+        \* /\ <<b, c, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
+        \* /\ <<c, a, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
     )
 
 

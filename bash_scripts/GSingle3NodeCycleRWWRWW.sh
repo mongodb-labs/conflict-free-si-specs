@@ -4,7 +4,7 @@
 # Compatible with older bash versions
 
 # Define the invariant to test
-INVARIANT="ThreeNodeCycleRWWRWW"
+INVARIANT="ThreeNodeCycle"
 
 echo "Running TLC for invariant: ${INVARIANT}"
 # Create config file for this invariant
@@ -13,7 +13,7 @@ INIT Init
 NEXT Next
 CONSTANTS
     Empty = Empty
-    txnIds = {t0, t1, t2, t3}
+    txnIds = {t0, t1, t2}
     keys = {k1, k2, k3, k4, k5, k6}  
     values = {v1, v2}
 INVARIANT ${INVARIANT}
