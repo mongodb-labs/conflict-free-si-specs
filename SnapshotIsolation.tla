@@ -876,8 +876,7 @@ GNonadjacentInv6NodeCycle ==
 
 \* /\ \E ty \in {"WR", "WW"} : <<d, a, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
 
-Invariant == ThreeNodeCycleRWWRWW
-
+Invariant == ThreeNodeCycle
 
 
 \* Find the cardinality of a given edge pair in the edge set
