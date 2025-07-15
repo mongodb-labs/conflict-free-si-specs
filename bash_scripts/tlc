@@ -1,0 +1,15 @@
+#!/bin/bash
+# TLC wrapper script for easier command line usage
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Check if tla2tools.jar exists in the script directory
+if [ ! -f "$SCRIPT_DIR/tla2tools.jar" ]; then
+    echo "Error: tla2tools.jar not found in $SCRIPT_DIR"
+    echo "Please download it using: curl -L -o tla2tools.jar https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar"
+    exit 1
+fi
+
+# Run TLC with all arguments passed to this script
+java -cp "$SCRIPT_DIR/tla2tools.jar" tlc2.TLC "$@"

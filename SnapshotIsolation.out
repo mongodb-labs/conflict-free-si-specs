@@ -1,0 +1,306 @@
+@!@!@STARTMSG 2262:0 @!@!@
+TLC2 Version 2.20 of Day Month 20?? (rev: 450f4c5)
+@!@!@ENDMSG 2262 @!@!@
+@!@!@STARTMSG 2188:0 @!@!@
+Running Random Simulation with seed 5076954675618349496 with 10 workers on 10 cores with 3641MB heap and 64MB offheap memory [pid: 80518] (Mac OS X 15.5 aarch64, Homebrew 24.0.1 x86_64).
+@!@!@ENDMSG 2188 @!@!@
+@!@!@STARTMSG 2220:0 @!@!@
+Starting SANY...
+@!@!@ENDMSG 2220 @!@!@
+Parsing file /Users/sai.achalla/Desktop/snapshot-isolation-spec/SnapshotIsolation.tla
+Parsing file /private/var/folders/58/fgss85_d6475h9d85fvg4_lc0000gp/T/tlc-10040149502770622378/Naturals.tla (jar:file:/Users/sai.achalla/.cursor/extensions/tlaplus.vscode-ide-2025.7.41721-universal/tools/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Parsing file /private/var/folders/58/fgss85_d6475h9d85fvg4_lc0000gp/T/tlc-10040149502770622378/FiniteSets.tla (jar:file:/Users/sai.achalla/.cursor/extensions/tlaplus.vscode-ide-2025.7.41721-universal/tools/tla2tools.jar!/tla2sany/StandardModules/FiniteSets.tla)
+Parsing file /private/var/folders/58/fgss85_d6475h9d85fvg4_lc0000gp/T/tlc-10040149502770622378/Sequences.tla (jar:file:/Users/sai.achalla/.cursor/extensions/tlaplus.vscode-ide-2025.7.41721-universal/tools/tla2tools.jar!/tla2sany/StandardModules/Sequences.tla)
+Parsing file /private/var/folders/58/fgss85_d6475h9d85fvg4_lc0000gp/T/tlc-10040149502770622378/TLC.tla (jar:file:/Users/sai.achalla/.cursor/extensions/tlaplus.vscode-ide-2025.7.41721-universal/tools/tla2tools.jar!/tla2sany/StandardModules/TLC.tla)
+Parsing file /private/var/folders/58/fgss85_d6475h9d85fvg4_lc0000gp/T/tlc-10040149502770622378/_JsonTrace.tla (jar:file:/Users/sai.achalla/.cursor/extensions/tlaplus.vscode-ide-2025.7.41721-universal/tools/tla2tools.jar!/tla2sany/StandardModules/_JsonTrace.tla)
+Parsing file /private/var/folders/58/fgss85_d6475h9d85fvg4_lc0000gp/T/tlc-10040149502770622378/TLCExt.tla (jar:file:/Users/sai.achalla/.cursor/extensions/tlaplus.vscode-ide-2025.7.41721-universal/tools/tla2tools.jar!/tla2sany/StandardModules/TLCExt.tla)
+Parsing file /private/var/folders/58/fgss85_d6475h9d85fvg4_lc0000gp/T/tlc-10040149502770622378/Json.tla (jar:file:/Users/sai.achalla/.cursor/extensions/tlaplus.vscode-ide-2025.7.41721-universal/tools/tla2tools.jar!/tla2sany/StandardModules/Json.tla)
+Parsing file /private/var/folders/58/fgss85_d6475h9d85fvg4_lc0000gp/T/tlc-10040149502770622378/Integers.tla (jar:file:/Users/sai.achalla/.cursor/extensions/tlaplus.vscode-ide-2025.7.41721-universal/tools/tla2tools.jar!/tla2sany/StandardModules/Integers.tla)
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module Integers
+Semantic processing of module TLCExt
+Semantic processing of module Json
+Semantic processing of module _JsonTrace
+Semantic processing of module SnapshotIsolation
+@!@!@STARTMSG 2219:0 @!@!@
+SANY finished.
+@!@!@ENDMSG 2219 @!@!@
+@!@!@STARTMSG 2185:0 @!@!@
+Starting... (2025-07-14 16:10:47)
+@!@!@ENDMSG 2185 @!@!@
+@!@!@STARTMSG 2269:0 @!@!@
+Computed 1 initial states...
+@!@!@ENDMSG 2269 @!@!@
+@!@!@STARTMSG 2190:0 @!@!@
+Finished computing initial states: 1 distinct state generated at 2025-07-14 16:10:53.
+@!@!@ENDMSG 2190 @!@!@
+@!@!@STARTMSG 2110:1 @!@!@
+Invariant GSingle2Inv2NodeCycleRWWW is violated.
+@!@!@ENDMSG 2110 @!@!@
+@!@!@STARTMSG 2121:1 @!@!@
+The behavior up to this point is:
+@!@!@ENDMSG 2121 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+1: <Init line 122, col 5 to line 126, col 41 of module SnapshotIsolation>
+/\ txnHistory = <<>>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+2: <StartTxn(t0) line 196, col 5 to line 208, col 30 of module SnapshotIsolation>
+/\ txnHistory = <<[type |-> "begin", txnId |-> t0, time |-> 1]>>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+3: <TxnRead(t0,k6) line 283, col 5 to line 291, col 68 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+4: <TxnRead(t0,k4) line 283, col 5 to line 291, col 68 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+5: <TxnUpdate(t0,k2,v2) line 294, col 5 to line 304, col 54 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+6: <TxnUpdate(t0,k4,v2) line 294, col 5 to line 304, col 54 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+7: <TxnUpdate(t0,k6,v2) line 294, col 5 to line 304, col 54 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k6, val |-> v2] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+8: <StartTxn(t3) line 196, col 5 to line 208, col 30 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k6, val |-> v2],
+   [type |-> "begin", txnId |-> t3, time |-> 2] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+9: <TxnRead(t0,k2) line 283, col 5 to line 291, col 68 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k6, val |-> v2],
+   [type |-> "begin", txnId |-> t3, time |-> 2],
+   [type |-> "read", txnId |-> t0, key |-> k2, val |-> v2] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+10: <TxnUpdate(t3,k2,v1) line 294, col 5 to line 304, col 54 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k6, val |-> v2],
+   [type |-> "begin", txnId |-> t3, time |-> 2],
+   [type |-> "read", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t3, key |-> k2, val |-> v1] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+11: <TxnRead(t3,k3) line 283, col 5 to line 291, col 68 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k6, val |-> v2],
+   [type |-> "begin", txnId |-> t3, time |-> 2],
+   [type |-> "read", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t3, key |-> k2, val |-> v1],
+   [type |-> "read", txnId |-> t3, key |-> k3, val |-> Empty] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+12: <TxnRead(t3,k4) line 283, col 5 to line 291, col 68 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k6, val |-> v2],
+   [type |-> "begin", txnId |-> t3, time |-> 2],
+   [type |-> "read", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t3, key |-> k2, val |-> v1],
+   [type |-> "read", txnId |-> t3, key |-> k3, val |-> Empty],
+   [type |-> "read", txnId |-> t3, key |-> k4, val |-> Empty] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+13: <StartTxn(t1) line 196, col 5 to line 208, col 30 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k6, val |-> v2],
+   [type |-> "begin", txnId |-> t3, time |-> 2],
+   [type |-> "read", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t3, key |-> k2, val |-> v1],
+   [type |-> "read", txnId |-> t3, key |-> k3, val |-> Empty],
+   [type |-> "read", txnId |-> t3, key |-> k4, val |-> Empty],
+   [type |-> "begin", txnId |-> t1, time |-> 3] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+14: <TxnUpdate(t3,k3,v1) line 294, col 5 to line 304, col 54 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k6, val |-> v2],
+   [type |-> "begin", txnId |-> t3, time |-> 2],
+   [type |-> "read", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t3, key |-> k2, val |-> v1],
+   [type |-> "read", txnId |-> t3, key |-> k3, val |-> Empty],
+   [type |-> "read", txnId |-> t3, key |-> k4, val |-> Empty],
+   [type |-> "begin", txnId |-> t1, time |-> 3],
+   [type |-> "write", txnId |-> t3, key |-> k3, val |-> v1] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+15: <TxnUpdate(t1,k2,v1) line 294, col 5 to line 304, col 54 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k6, val |-> v2],
+   [type |-> "begin", txnId |-> t3, time |-> 2],
+   [type |-> "read", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t3, key |-> k2, val |-> v1],
+   [type |-> "read", txnId |-> t3, key |-> k3, val |-> Empty],
+   [type |-> "read", txnId |-> t3, key |-> k4, val |-> Empty],
+   [type |-> "begin", txnId |-> t1, time |-> 3],
+   [type |-> "write", txnId |-> t3, key |-> k3, val |-> v1],
+   [type |-> "write", txnId |-> t1, key |-> k2, val |-> v1] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+16: <CommitTxn(t1) line 233, col 5 to line 251, col 33 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k6, val |-> v2],
+   [type |-> "begin", txnId |-> t3, time |-> 2],
+   [type |-> "read", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t3, key |-> k2, val |-> v1],
+   [type |-> "read", txnId |-> t3, key |-> k3, val |-> Empty],
+   [type |-> "read", txnId |-> t3, key |-> k4, val |-> Empty],
+   [type |-> "begin", txnId |-> t1, time |-> 3],
+   [type |-> "write", txnId |-> t3, key |-> k3, val |-> v1],
+   [type |-> "write", txnId |-> t1, key |-> k2, val |-> v1],
+   [type |-> "commit", txnId |-> t1, time |-> 4, updatedKeys |-> {k2}] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+17: <TxnRead(t3,k1) line 283, col 5 to line 291, col 68 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k6, val |-> v2],
+   [type |-> "begin", txnId |-> t3, time |-> 2],
+   [type |-> "read", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t3, key |-> k2, val |-> v1],
+   [type |-> "read", txnId |-> t3, key |-> k3, val |-> Empty],
+   [type |-> "read", txnId |-> t3, key |-> k4, val |-> Empty],
+   [type |-> "begin", txnId |-> t1, time |-> 3],
+   [type |-> "write", txnId |-> t3, key |-> k3, val |-> v1],
+   [type |-> "write", txnId |-> t1, key |-> k2, val |-> v1],
+   [type |-> "commit", txnId |-> t1, time |-> 4, updatedKeys |-> {k2}],
+   [type |-> "read", txnId |-> t3, key |-> k1, val |-> Empty] >>
+/\ ccgraph = {}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+18: <CommitTxn(t0) line 233, col 5 to line 251, col 33 of module SnapshotIsolation>
+/\ txnHistory = << [type |-> "begin", txnId |-> t0, time |-> 1],
+   [type |-> "read", txnId |-> t0, key |-> k6, val |-> Empty],
+   [type |-> "read", txnId |-> t0, key |-> k4, val |-> Empty],
+   [type |-> "write", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k4, val |-> v2],
+   [type |-> "write", txnId |-> t0, key |-> k6, val |-> v2],
+   [type |-> "begin", txnId |-> t3, time |-> 2],
+   [type |-> "read", txnId |-> t0, key |-> k2, val |-> v2],
+   [type |-> "write", txnId |-> t3, key |-> k2, val |-> v1],
+   [type |-> "read", txnId |-> t3, key |-> k3, val |-> Empty],
+   [type |-> "read", txnId |-> t3, key |-> k4, val |-> Empty],
+   [type |-> "begin", txnId |-> t1, time |-> 3],
+   [type |-> "write", txnId |-> t3, key |-> k3, val |-> v1],
+   [type |-> "write", txnId |-> t1, key |-> k2, val |-> v1],
+   [type |-> "commit", txnId |-> t1, time |-> 4, updatedKeys |-> {k2}],
+   [type |-> "read", txnId |-> t3, key |-> k1, val |-> Empty],
+   [ type |-> "commit",
+     txnId |-> t0,
+     time |-> 5,
+     updatedKeys |-> {k2, k4, k6} ] >>
+/\ ccgraph = {<<t0, t1, "RW", "concurrent">>, <<t1, t0, "WW", "concurrent">>}
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2209:0 @!@!@
+Progress(72) at 2025-07-14 16:10:54: 1441 states generated, -1 distinct states found, -1 states left on queue.
+@!@!@ENDMSG 2209 @!@!@
+@!@!@STARTMSG 2210:0 @!@!@
+The number of states generated: 1442
+Simulation using seed 5076954675618349496 and aril 0
+@!@!@ENDMSG 2210 @!@!@
+"CounterExample written: trace.json"
+@!@!@STARTMSG 2209:0 @!@!@
+Progress(72) at 2025-07-14 16:10:54: 1444 states generated, -1 distinct states found, -1 states left on queue.
+@!@!@ENDMSG 2209 @!@!@
+@!@!@STARTMSG 2186:0 @!@!@
+Finished in 7155ms at (2025-07-14 16:10:54)
+@!@!@ENDMSG 2186 @!@!@
