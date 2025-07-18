@@ -2,9 +2,12 @@
 digraph {
 	rankdir=LR
 	t0
-	t1
-	t0 -> t1 [label="RW(C)"]
+	t2
+	t0 -> t2 [label="WW(NC)"]
 	t1
 	t0
-	t1 -> t0 [label="WW(C)"]
+	t1 -> t0 [label="RW(C)"]
+	t2
+	t1
+	t2 -> t1 [label="WW(C)"]
 }

@@ -10,7 +10,7 @@ import graphviz
 # version of serialization graph.
 #
 
-def visualize_sergraph(trace_file="trace.json"):
+def visualize_sergraph(trace_file="traces/trace-ThreeNodeCycle.json"):
     # Read and parse the trace file
     with open(trace_file, 'r') as f:
         trace = json.load(f)["state"]

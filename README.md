@@ -1,4 +1,58 @@
-# Specification of Snapshot Isolation in TLA+
+# Snapshot Isolation Analysis with TLA+
+
+This repository contains a TLA+ specification for snapshot isolation along with analysis tools for processing model checker outputs and visualizing transaction conflict graphs.
+
+## 🔧 Transaction History Analysis Tool
+
+The main analysis tool (`tla_to_transaction_history.py`) processes TLA+ trace files to extract and visualize transaction histories with conflict graph filtering.
+
+### Quick Start
+
+```bash
+# Navigate to the analysis tools directory
+cd db_diagram
+
+# Using the helper script (recommended)
+./analyze.sh           # Process all trace files (default)
+./analyze.sh analyze   # Process all trace files  
+./analyze.sh clean     # Clean up generated files
+
+# Or use the Python script directly
+python3 tla_to_transaction_history.py                                    # Process all traces (default)
+python3 tla_to_transaction_history.py all                                # Process all traces
+python3 tla_to_transaction_history.py ../traces/trace-ThreeNodeCycle.json # Process specific file
+python3 tla_to_transaction_history.py --help                             # Get help
+```
+
+### Key Features
+
+- **🔍 Conflict Graph Filtering**: Automatically extracts `ccgraph` and filters to only relevant transactions
+- **📊 Timeline Visualization**: Generates clean SVG/PNG visualizations of transaction histories  
+- **📝 dbdiag Format**: Converts to standardized format for analysis tools
+- **⚡ Batch Processing**: Process multiple trace files in one command
+
+### Requirements
+
+- **Python 3.7+** (uses standard library only)
+- **rsvg-convert** (optional, for PNG generation)
+  - macOS: `brew install librsvg`  
+  - Ubuntu: `sudo apt-get install librsvg2-bin`
+
+### Output Structure
+```
+├── traces/                          # Input JSON trace files
+└── db_diagram/                      # Analysis tools directory
+    ├── analyze.sh                   # Helper script
+    ├── tla_to_transaction_history.py # Main analysis tool
+    └── output/                      # All generated files (for trace files only)
+        ├── dbdiag_outputs/          # Generated dbdiag format files
+        ├── visualizations/          # Generated SVG files  
+        └── images/                  # Generated PNG files
+```
+
+---
+
+## 📋 TLA+ Specification of Snapshot Isolation
 
 This is a TLA+ specification that can be used for exploring and understanding snapshot isolation. I wrote it partly as a personal exercise and partly as an attempt to share the ideas and semantics of snapshot isolation with other engineers in a precise manner. My goal was to make this spec as simple as possible without removing necessary details. I wanted to focus more on high level concepts than on how a particular system might actually implement snapshot isolation. The comments explain in more detail the structure of the model and the various correctness properties. I drew some inspiration (and a few of the more tricky definitions) from Chris Newcombe's specification of snapshot isolation, which is a bit more complex than mine. He presented a few of his specs in a "Debugging Designs" talk at a [HPTS conference in 2011](http://hpts.ws/papers/2011/agenda.html). His two snapshot isolation specs are very thorough and well documented.
 
