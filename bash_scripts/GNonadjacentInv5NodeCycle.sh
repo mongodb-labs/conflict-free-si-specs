@@ -4,7 +4,7 @@
 # Compatible with older bash versions
 
 # Define the invariant to test
-INVARIANT="GNonadjacentInv5NodeCycleWRRW"
+INVARIANT="GNonadjacentInv5NodeCycle"
 
 echo "Running TLC for invariant: ${INVARIANT}"
 # Create config file for this invariant

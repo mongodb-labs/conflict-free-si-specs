@@ -859,7 +859,7 @@ GNonadjacentInv4NodeCycleWRRW ==
         /\ <<d, a, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
     )
 
-GNonadjacentInv5NodeCycleWRRW == 
+GNonadjacentInv5NodeCycle == 
     ~(
       /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) <= 5
       /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 5
@@ -869,7 +869,7 @@ GNonadjacentInv5NodeCycleWRRW ==
         /\ \E ty \in {"WR", "WW"} : <<b, c, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
         /\ \E ty \in {"WR", "WW"} : <<c, d, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
         /\ \E ty \in {"WR", "WW"} : <<d, e, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<e, a, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
+        /\ \E ty \in {"WR", "WW"} : <<e, a, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
     )
 
 GNonadjacentInv6NodeCycle == 
