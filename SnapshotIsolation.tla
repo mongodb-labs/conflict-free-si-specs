@@ -835,14 +835,14 @@ GSingle2Inv2NodeCycleRWWW ==
         /\ <<b, a, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
     )
 
-GNonadjacentInv4NodeCycleRWWWWRWW == 
+GNonadjacentInv4NodeCycle2WR == 
     ~(
       /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) <= 4
       /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 4
       /\ \E a,b,c,d \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
         /\ Cardinality({a,b,c,d}) = 4
         /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<b, c, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
+        /\ <<b, c, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
         /\ <<c, d, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
         /\ <<d, a, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
     )
