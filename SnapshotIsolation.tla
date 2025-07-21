@@ -847,7 +847,7 @@ GNonadjacentInv4NodeCycleRWWWWRWW ==
         /\ <<d, a, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
     )
     
-GNonadjacentInv4NodeCycleRWWWWWWR == 
+GNonadjacentInv4NodeCycleWRRW == 
     ~(
       /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) <= 4
       /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 4
