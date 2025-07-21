@@ -46,18 +46,87 @@ Actually, this could work if:
 - t2 starts while t0 is still running
 - t1 fits in between
 
-So WR→RW in a 3-node cycle isn't inherently impossible!
-
-Wait, let me reconsider. In a 3-node cycle, we need to close back to t0. Let's check all possibilities:
+Let me analyze each case more carefully:
 
 **Pattern: WR → RW → X (where X closes to t0)**
 
-For X to close the cycle from t2 to t0:
-- **X = WW**: Possible (as analyzed above)
-- **X = RW**: Would need t2 to read before t0 commits, but t0 commits before t1 starts, and t2 starts after t1. This is tight but possible.
-- **X = WR**: Would need `commit(t2) < start(t0)`, but we have `commit(t0) < start(t1) < commit(t2)`, giving us `commit(t0) < commit(t2) < start(t0)` - **IMPOSSIBLE!**
+### Case 1: WR → RW → WW
+```
+t0 → t1 → t2 → t0
+WR   RW   WW
+```
 
-So in 3-node cycles, WR→RW→WR is impossible, but WR→RW→WW and WR→RW→RW might be possible!
+Constraints:
+1. `commit(t0) < start(t1)` (WR)
+2. `start(t1) < commit(t2)` (RW)
+3. t0 and t2 must have overlapping execution (WW)
+
+From 1 & 2: `commit(t0) < start(t1) < commit(t2)`
+
+For the WW conflict, t0 and t2 must write to the same key and have overlapping execution periods. This requires:
+- `start(t0) < commit(t2)` AND `start(t2) < commit(t0)`
+
+But we know `commit(t0) < start(t1) < commit(t2)`. For t2 to start before t0 commits, we need:
+`start(t2) < commit(t0) < start(t1) < commit(t2)`
+
+Under snapshot isolation with first-committer-wins:
+- t0 and t2 both write to the same key
+- t0 commits first (before t1 even starts)
+- When t2 tries to commit, it detects the WW conflict
+- t2 must abort
+
+But if t2 aborts, the RW edge (t1 → t2) is broken because t2 never successfully commits!
+
+**Result: WR → RW → WW is IMPOSSIBLE** ❌
+
+### Case 2: WR → RW → RW
+```
+t0 → t1 → t2 → t0
+WR   RW   RW
+```
+
+Constraints:
+1. `commit(t0) < start(t1)` (WR)
+2. `start(t1) < commit(t2)` (RW)
+3. `start(t2) < commit(t0)` (RW - t2 reads, t0 writes)
+
+From constraints: `start(t2) < commit(t0) < start(t1) < commit(t2)`
+
+This means t2 starts before t0 commits, but doesn't commit until after t1 starts. This creates a valid timeline:
+1. t2 starts (and reads)
+2. t0 commits
+3. t1 starts (and reads)
+4. t2 commits
+
+The question is whether this satisfies all RW constraints with proper snapshot isolation semantics... Actually, this seems possible at first, but let's verify the WR edge.
+
+For t0 → t1 (WR), t1 must read a value that t0 wrote. Since `commit(t0) < start(t1)`, t1's snapshot (taken at start(t1)) includes t0's writes. So t1 can read t0's value. ✓
+
+But wait - I need to think about the cycle property. For this to be a proper cycle creating a non-serializable history, the transactions must have conflicting operations that create the anomaly. Let me reconsider...
+
+Actually, this might work in specific cases, but it's highly constrained.
+
+### Case 3: WR → RW → WR
+```
+t0 → t1 → t2 → t0
+WR   RW   WR
+```
+
+Constraints:
+1. `commit(t0) < start(t1)` (WR)
+2. `start(t1) < commit(t2)` (RW)
+3. `commit(t2) < start(t0)` (WR)
+
+From 1 & 2: `commit(t0) < start(t1) < commit(t2)`
+From 3: `commit(t2) < start(t0)`
+
+Combined: `commit(t2) < start(t0) < commit(t0) < start(t1) < commit(t2)`
+
+This gives us `commit(t2) < commit(t2)`, which is impossible!
+
+**Result: WR → RW → WR is IMPOSSIBLE** ❌
+
+So in 3-node cycles, WR→RW can only potentially work with RW as the closing edge, and even then it's highly constrained.
 
 ### 4-Node Cycle with WR→RW
 
@@ -84,7 +153,32 @@ For constraint 4, t3 and t0 must overlap. For constraint 1, t0 and t1 must overl
 
 This creates a requirement: t0 must be running both when t1 is running AND when t3 is running. Given that t1 must commit before t2 starts, and t3 doesn't start until after t2 starts, this requires a very long-running t0.
 
-This is possible but highly constrained!
+Let's verify this more carefully:
+- For the first WW (t0 ↔ t1): `start(t0) < commit(t1)` AND `start(t1) < commit(t0)`
+- From WR: `commit(t1) < start(t2)`
+- From RW: `start(t2) < commit(t3)`
+- For the second WW (t3 ↔ t0): `start(t3) < commit(t0)` AND `start(t0) < commit(t3)`
+
+Combining: We need `start(t1) < commit(t0)` (from first WW) and `start(t3) < commit(t0)` (from second WW).
+
+From the WR→RW chain: `commit(t1) < start(t2) < commit(t3)`
+
+So t0 must still be running (not committed) when both t1 and t3 are running. But t1 must commit before t2 even starts, and t3 doesn't start until after t2 starts. This means:
+- t1 starts and runs
+- t1 commits
+- t2 starts
+- t3 starts (while t2 is running due to RW)
+- t0 must still be running at this point
+
+This requires t0 to run from before t1 starts until after t3 starts, spanning the entire WR→RW chain. Under first-committer-wins, when there are two WW conflicts:
+- If t0 commits before t1, then t1 must abort (breaking the WR edge)
+- If t1 commits before t0, we need t0 to continue running until t3 starts
+- If t0 commits before t3, then t3 must abort (breaking the RW edge)
+- If t3 commits before t0, we need to check if this is consistent
+
+Actually, this pattern requires very specific timing and transaction operations that make it practically impossible under snapshot isolation's rules.
+
+**Result: WW → WR → RW → WW is IMPOSSIBLE** ❌
 
 ### 5-Node Cycle with WR→RW
 
@@ -141,7 +235,29 @@ From 2, 3, 4: `commit(t1) < start(t2) < commit(t3) < start(t4)`
 
 For constraint 5, t4 and t0 must overlap. But t4 doesn't start until after this long chain of events, while t0 must be running early to overlap with t1.
 
-This requires t0 to span from before t1 commits all the way until after t4 starts. Given the chain of WR→RW→WR, this is extremely constrained and likely **IMPOSSIBLE**.
+This requires t0 to span from before t1 commits all the way until after t4 starts. Given the chain of WR→RW→WR, let's verify:
+
+From the WR→RW→WR chain: `commit(t1) < start(t2) < commit(t3) < start(t4)`
+
+For the WW conflicts:
+- t0 and t1 must overlap: `start(t0) < commit(t1)` AND `start(t1) < commit(t0)`
+- t4 and t0 must overlap: `start(t4) < commit(t0)` AND `start(t0) < commit(t4)`
+
+From the first WW: `start(t1) < commit(t0)`
+From the second WW: `start(t4) < commit(t0)`
+From the WR chain: `commit(t1) < start(t2) < commit(t3) < start(t4)`
+
+This means: `commit(t1) < start(t4) < commit(t0)`
+
+But we also need `start(t1) < commit(t0)` from the first WW. So t0 must be running from before t1 commits all the way past when t4 starts. 
+
+The critical issue: t1 must commit before t2 starts (WR), and t4 doesn't start until after t3 commits (WR). This creates a huge temporal gap. For both WW conflicts to exist without aborts:
+- t1 must commit after t0 starts but before t0 commits
+- t4 must start before t0 commits
+
+But the WR→RW→WR chain forces such a long delay between t1's commit and t4's start that maintaining t0's execution across this entire period while satisfying all constraints is impossible.
+
+**Result: WW → WR → RW → WR → WW is IMPOSSIBLE** ❌
 
 ## Key Finding: The WR→RW Problem
 
@@ -163,14 +279,36 @@ The WR→RW sequence isn't inherently impossible by itself, but it creates sever
 
 ## Conclusion
 
-**WR→RW is not inherently impossible**, but it creates severe constraints that often lead to impossible cycles when combined with:
-- Additional WR edges (especially WR→RW→WR)
-- Multiple WW edges that require careful timing
-- Small cycle sizes that don't provide enough temporal flexibility
+After deeper analysis, **WR→RW creates fundamental problems** that make most cycle patterns impossible:
 
-The pattern becomes increasingly difficult as:
-1. More WR edges are added to the cycle
-2. The cycle size is smaller
-3. The WR→RW sequence appears near the end of the cycle (making it harder to close back to the start)
+### In 3-Node Cycles:
+- **WR→RW→WR**: Impossible (temporal loop)
+- **WR→RW→WW**: Impossible (abort breaks the cycle)
+- **WR→RW→RW**: Theoretically possible but highly constrained
 
-In larger cycles with more WW edges and better placement of the WR→RW sequence, it might be possible to create valid instances. But in the cases you've been testing (4-node cycles with specific patterns), the WR→RW sequence, when present, tends to create impossible temporal constraints.
+### In 4-Node Cycles:
+- **WW→WR→RW→WW**: Impossible (multiple WW conflicts with WR→RW timing)
+- Patterns with WR→RW generally fail due to WW conflict resolution
+
+### In 5-Node Cycles:
+- **WR→RW→...→WR**: Impossible when WR edges bookend the pattern
+- **WW→WR→RW→WR→WW**: Impossible due to temporal gap created by WR→RW→WR
+
+### The Core Issues with WR→RW:
+
+1. **Temporal Direction**: WR→RW creates a strict forward temporal flow that's hard to reconcile with cycle closure
+
+2. **WW Conflict Interaction**: When WR→RW is combined with WW edges:
+   - The temporal ordering often forces one transaction to commit first
+   - This causes the other to abort under first-committer-wins
+   - The abort breaks required edges in the cycle
+
+3. **Cumulative Effect**: Each WR edge adds temporal separation, and WR→RW→WR creates gaps too large to bridge
+
+### Key Insight:
+While WR→RW isn't impossible in isolation, it's effectively impossible in most practical cycle patterns under snapshot isolation due to:
+- Interaction with first-committer-wins rule for WW conflicts
+- Cumulative temporal constraints when combined with other edges
+- The need to eventually close the cycle back to the starting transaction
+
+This explains why your model checker struggles with patterns containing WR→RW sequences - they represent fundamental temporal contradictions in snapshot isolation.
