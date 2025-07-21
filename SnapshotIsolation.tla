@@ -854,8 +854,8 @@ GNonadjacentInv4NodeCycleRWWWWWWR ==
       /\ \E a,b,c,d \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
         /\ Cardinality({a,b,c,d}) = 4
         /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<b, c, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<c, d, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
+        /\ \E ty \in {"WR", "WW"} : <<b, c, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
+        /\ \E ty \in {"WR", "WW"} : <<c, d, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
         /\ <<d, a, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
     )
 
