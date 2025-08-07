@@ -31,6 +31,33 @@ rm -f ../traces/read_only_anomaly.txt
 # Run TLC directly with cleanup flag
 ./tlc -simulate -cleanup -gzip -workers 10 -dumpTrace json ../traces/trace-${INVARIANT}.json -config SnapshotIsolation.cfg ../SnapshotIsolation.tla
 
+# Check if trace file was generated and run visualization
+TRACE_FILE="../traces/trace-${INVARIANT}.json"
+VIZ_OUTPUT_DIR="../db_diagram/output/graphs"
+
+if [ -f "${TRACE_FILE}" ]; then
+    echo "Trace file generated successfully: ${TRACE_FILE}"
+    
+    # Create visualization directory if it doesn't exist
+    mkdir -p "${VIZ_OUTPUT_DIR}"
+    
+    # Run visualization script
+    echo "Running visualization script..."
+    cd ..
+    python3 viz.py "traces/trace-${INVARIANT}.json" "db_diagram/output/graphs/ccgraph-${INVARIANT}"
+    
+    if [ $? -eq 0 ]; then
+        echo "Visualization completed successfully!"
+        echo "Output saved to: db_diagram/output/graphs/ccgraph-${INVARIANT}.png"
+    else
+        echo "Visualization failed!"
+    fi
+    
+    cd bash_scripts
+else
+    echo "No trace file generated - the invariant was not violated"
+fi
+
 # Clean up any trace files generated during this run
 echo "Cleaning up trace files generated during this run..."
 rm -f SnapshotIsolation_TTrace_*.bin SnapshotIsolation_TTrace_*.tla

@@ -92,7 +92,16 @@ VARIABLE dataStore
 \* depend on the actual data being read/written.
 VARIABLE txnSnapshots
 
-vars == <<clock, runningTxns, txnSnapshots, dataStore, txnHistory>>
+\* All the variables that are used in the new RW edge detection definition of Snapshot Isolation are defined below.
+
+\* The set of all incoming edges to a given transaction. Used to detect dangerous edge sequences in the algorithm.
+VARIABLE incomingEdges
+
+\* The set of all outgoing edges from a given transaction. Used to detect dangerous edge sequences in the algorithm.
+VARIABLE outgoingEdges
+
+
+vars == <<clock, runningTxns, txnSnapshots, dataStore, txnHistory, incomingEdges, outgoingEdges>>
 
 
 (**************************************************************************************************)
@@ -117,6 +126,8 @@ TypeInvariant ==
     /\ runningTxns  \in SUBSET [ id : txnIds, 
                                  startTime  : Nat, 
                                  commitTime : Nat \cup {Empty}]
+    /\ incomingEdges \in [txnIds -> SUBSET (txnIds x {"WW", "WR", "RW"})]
+    /\ outgoingEdges \in [txnIds -> SUBSET (txnIds x {"WW", "WR", "RW"})]
 
 Init ==  
     /\ runningTxns = {} 
@@ -124,6 +135,8 @@ Init ==
     /\ clock = 0
     /\ txnSnapshots = [id \in txnIds |-> Empty]
     /\ dataStore = [k \in keys |-> Empty]
+    /\ incomingEdges = [id \in txnIds |-> {}] \* Initially no incoming edges.
+    /\ outgoingEdges = [id \in txnIds |-> {}] \* Initially no outgoing edges.
 
 (**************************************************************************************************)
 (* Helpers for querying transaction histories.                                                    *)
@@ -205,7 +218,7 @@ StartTxn(newTxnId) ==
     /\ runningTxns' = runningTxns \cup {newTxn}
     \* Tick the clock.
     /\ clock' = clock + 1    
-    /\ UNCHANGED <<dataStore>>
+    /\ UNCHANGED <<dataStore, incomingEdges, outgoingEdges>>
                                                   
 (**************************************************************************************************)
 (* When a transaction T0 is ready to commit, it obeys the "First Committer Wins" rule.  T0 will   *)
@@ -280,14 +293,40 @@ AbortTxn(txnId) ==
 
 TxnRead(txnId, k) == 
     \* Read from this transaction's snapshot.
+    \* Update the transaction's incoming and outgoing edges based on RW edge detection.
     /\ txnId \in RunningTxnIds
     /\ LET valRead == txnSnapshots[txnId][k]
         readOp == [ type  |-> "read", 
                     txnId |-> txnId, 
                     key   |-> k, 
-                    val   |-> valRead] IN
+                    val   |-> valRead]
+
+        \* Potential transactions that have written to the same key that this transaction reads till this point in time.
+        \* BEWARE: This does not consider the case where a transaction writes to this key after the read is performed - this is a simplification.
+        \* FIX: Can be fixed by doing the check at commit time. Will additionally need to track the start and commit times of transactions.
+        potentialRWTargets == {t.id : t \in runningTxns 
+                                /\ t.id \notin txnId 
+                                /\ \E op \in WritesByTxn(txnHistory, t.id) : op.key = k} \* Transactions that write to the same key.
+
+        \* Create the set of outgoing RW edges for this transaction.
+        newOutgoingRW == {<<other, "RW">> : other \in potentialRWTargets}
+
+        \* Updates the set of incoming edges to the writing transactions that wrote to the key that this transaction read.
+        updatedIncoming == [t \in txnIds |->
+                            IF t \in potentialRWTargets
+                            THEN incomingEdges[t] \cup {<<txnId, "RW">>}
+                            ELSE incomingEdges[t]]
+
+        \* Create the new outgoing edges for this transaction.
+        updatedOutgoing == [outgoingEdges EXCEPT ![txnId] = outgoingEdges[txnId] \cup newOutgoingRW]
+
+        IN
+        
         /\ k \notin KeysReadByTxn(txnHistory, txnId)   
         /\ txnHistory' = Append(txnHistory, readOp)
+        \* Set the new incoming and outgoing edges for this transaction.
+        /\ incomingEdges' = updatedIncoming
+        /\ outgoingEdges' = updatedOutgoing
         /\ UNCHANGED <<dataStore, clock, runningTxns, txnSnapshots>>
                    
 TxnUpdate(txnId, k, v) == 
@@ -704,6 +743,84 @@ GNonadjacent4NodeTest == <<
 >>
 
 
+GNonadjacent4NodeWithoutWWTest == <<
+    [type |-> "begin",  txnId |-> 1, time |-> 1], \* T1 begins
+    [type |-> "write",  txnId |-> 1, key |-> "X", val |-> "$50"], \* T1 writes (X, $50)
+    [type |-> "write",  txnId |-> 1, key |-> "Y", val |-> "$50"], \* T1 writes (Y, $50) 
+    [type |-> "write",  txnId |-> 1, key |-> "M", val |-> "Open"], \* T1 writes (M, "Open")
+    [type |-> "commit", txnId |-> 1, time |-> 2, updatedKeys |-> {"X", "Y", "M"}], \* T1 commits
+    [type |-> "begin",  txnId |-> 4, time |-> 3], \* T4 begins
+    [type |-> "read",   txnId |-> 4, key |-> "M", val |-> "Open"], \* T4 reads M → gets "Open"
+    [type |-> "begin",  txnId |-> 5, time |-> 4], \* T5 begins
+    [type |-> "read",   txnId |-> 5, key |-> "M", val |-> "Open"], \* T5 reads M → gets "Open"
+    [type |-> "begin",  txnId |-> 2, time |-> 5], \* Ta begins (renaming T2 to Ta for clarity)
+    [type |-> "write",  txnId |-> 4, key |-> "X", val |-> "$70"], \* T4 writes (X, $70)
+    [type |-> "commit", txnId |-> 4, time |-> 6, updatedKeys |-> {"X"}], \* T4 commits
+    [type |-> "read",   txnId |-> 2, key |-> "X", val |-> "$70"], \* Ta reads X → gets $70 (sees T4's committed update)
+    [type |-> "begin",  txnId |-> 3, time |-> 7], \* Tb begins (using txnId 3 for Tb)
+    [type |-> "write",  txnId |-> 5, key |-> "Y", val |-> "$75"], \* T5 writes (Y, $75)
+    [type |-> "read",   txnId |-> 2, key |-> "Y", val |-> "$50"], \* Ta reads Y → gets $50 (misses T5's update - T5 hasn't committed yet)
+    [type |-> "commit", txnId |-> 2, time |-> 8, updatedKeys |-> {}], \* Ta commits
+    [type |-> "commit", txnId |-> 5, time |-> 9, updatedKeys |-> {"Y"}], \* T5 commits
+    [type |-> "read",   txnId |-> 3, key |-> "Y", val |-> "$75"], \* Tb reads Y → gets $75 (sees T5's committed update)
+    [type |-> "read",   txnId |-> 3, key |-> "X", val |-> "$50"], \* Tb reads X → gets $50 (misses T4's update due to snapshot choice)
+    [type |-> "commit", txnId |-> 3, time |-> 10, updatedKeys |-> {}] \* Tb commits
+>>
+
+
+G6NodeCycleTest == <<
+    [type |-> "begin",  txnId |-> 0, time |-> 1],
+    [type |-> "begin",  txnId |-> 1, time |-> 2],
+    [type |-> "begin",  txnId |-> 2, time |-> 3],
+    [type |-> "begin",  txnId |-> 3, time |-> 4],
+    [type |-> "begin",  txnId |-> 4, time |-> 5],
+    [type |-> "begin",  txnId |-> 5, time |-> 6],
+
+    \* T0 writes k1 (for T0→WR T1)
+    [type |-> "write",  txnId |-> 0, key |-> "k1", val |-> "v1"],
+    
+    \* T1 reads k1 from T0 (creates T0→WR T1)
+    [type |-> "read",   txnId |-> 1, key |-> "k1", val |-> "v1"],
+    
+    \* T2 reads k2 early (for T1→RW T2)
+    [type |-> "read",   txnId |-> 2, key |-> "k2", val |-> "Empty"],
+    
+    \* T1 writes k2 after T2 read (creates T1→RW T2)
+    [type |-> "write",  txnId |-> 1, key |-> "k2", val |-> "v1"],
+    
+    \* T2 writes k3 (for T2→WR T3, since WW doesn't create edges)
+    [type |-> "write",  txnId |-> 2, key |-> "k3", val |-> "v1"],
+    
+    \* T3 reads k3 from T2 (creates T2→WR T3)
+    [type |-> "read",   txnId |-> 3, key |-> "k3", val |-> "v1"],
+    
+    \* T3 writes k4 (for T3→WR T4)
+    [type |-> "write",  txnId |-> 3, key |-> "k4", val |-> "v1"],
+    
+    \* T4 reads k4 from T3 (creates T3→WR T4)
+    [type |-> "read",   txnId |-> 4, key |-> "k4", val |-> "v1"],
+    
+    \* T5 reads k5 early (for T4→RW T5)
+    [type |-> "read",   txnId |-> 5, key |-> "k5", val |-> "Empty"],
+    
+    \* T4 writes k5 after T5 read (creates T4→RW T5)
+    [type |-> "write",  txnId |-> 4, key |-> "k5", val |-> "v1"],
+    
+    \* T5 writes k6 (for T5→WR T0, to close the cycle)
+    [type |-> "write",  txnId |-> 5, key |-> "k6", val |-> "v1"],
+    
+    \* T0 reads k6 from T5 (creates T5→WR T0, completing the cycle)
+    [type |-> "read",   txnId |-> 0, key |-> "k6", val |-> "v1"],
+    
+    \* Commits in order
+    [type |-> "commit", txnId |-> 0, time |-> 7, updatedKeys |-> {"k1"}],
+    [type |-> "commit", txnId |-> 1, time |-> 8, updatedKeys |-> {"k2"}],
+    [type |-> "commit", txnId |-> 2, time |-> 9, updatedKeys |-> {"k3"}],
+    [type |-> "commit", txnId |-> 3, time |-> 10, updatedKeys |-> {"k4"}],
+    [type |-> "commit", txnId |-> 4, time |-> 11, updatedKeys |-> {"k5"}],
+    [type |-> "commit", txnId |-> 5, time |-> 12, updatedKeys |-> {"k6"}]
+>>
+
 (**************************************************************************************************)
 (* G-Single and G-Nonadjacent Anomaly (Experimental).                                             *)
 (*                                                                                                *)
@@ -886,9 +1003,11 @@ GNonadjacentInv6NodeCycle ==
         /\ \E ty \in {"WR", "WW"} : <<f, a, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
     )
 
+ASSUME 
+    PrintT(SerializationGraphWithCC(G6NodeCycleTest))
 \* /\ \E ty \in {"WR", "WW"} : <<d, a, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
 
-Invariant == ThreeNodeCycle
+Invariant == GSingle2Inv2NodeCycleRWWW
 
 
 \* Find the cardinality of a given edge pair in the edge set

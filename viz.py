@@ -10,7 +10,7 @@ import graphviz
 # version of serialization graph.
 #
 
-def visualize_sergraph(trace_file="traces/trace-ThreeNodeCycle.json"):
+def visualize_sergraph(trace_file="traces/trace-ThreeNodeCycle.json", output_name="ccgraph"):
     # Read and parse the trace file
     with open(trace_file, 'r') as f:
         trace = json.load(f)["state"]
@@ -41,8 +41,15 @@ def visualize_sergraph(trace_file="traces/trace-ThreeNodeCycle.json"):
             label = etype + "(NC)"
         dot.edge(src, target, label=label)
     
-    # Save the graph
-    dot.render('ccgraph', format='png', cleanup=False)
+    # Save the graph (only PNG, no DOT file)
+    dot.render(output_name, format='png', cleanup=True)
 
 if __name__ == '__main__':
-    visualize_sergraph()
+    import sys
+    
+    if len(sys.argv) > 1:
+        trace_file = sys.argv[1]
+        output_name = sys.argv[2] if len(sys.argv) > 2 else "ccgraph"
+        visualize_sergraph(trace_file, output_name)
+    else:
+        visualize_sergraph()
