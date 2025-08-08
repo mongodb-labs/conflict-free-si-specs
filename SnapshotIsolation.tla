@@ -100,8 +100,11 @@ VARIABLE incomingEdges
 \* The set of all outgoing edges from a given transaction. Used to detect dangerous edge sequences in the algorithm.
 VARIABLE outgoingEdges
 
+\* The set of transactions that are concurrent with a given transaction.
+VARIABLE concurrentTxns
 
-vars == <<clock, runningTxns, txnSnapshots, dataStore, txnHistory, incomingEdges, outgoingEdges>>
+
+vars == <<clock, runningTxns, txnSnapshots, dataStore, txnHistory, incomingEdges, outgoingEdges, concurrentTxns>>
 
 
 (**************************************************************************************************)
@@ -126,8 +129,9 @@ TypeInvariant ==
     /\ runningTxns  \in SUBSET [ id : txnIds, 
                                  startTime  : Nat, 
                                  commitTime : Nat \cup {Empty}]
-    /\ incomingEdges \in [txnIds -> SUBSET (txnIds x {"WW", "WR", "RW"})]
-    /\ outgoingEdges \in [txnIds -> SUBSET (txnIds x {"WW", "WR", "RW"})]
+    /\ incomingEdges \in [txnIds -> SUBSET (txnIds x {"WW", "WR", "RW"})] \* Map from transaction id to set of (incoming transaction, edge type) pairs.
+    /\ outgoingEdges \in [txnIds -> SUBSET (txnIds x {"WW", "WR", "RW"})] \* Map from transaction id to set of (outgoing transaction, edge type) pairs.
+    /\ concurrentTxns \in [txnIds -> SUBSET txnIds] \* Map from transaction id to set of concurrent transaction ids. Set at begin time.
 
 Init ==  
     /\ runningTxns = {} 
@@ -137,6 +141,7 @@ Init ==
     /\ dataStore = [k \in keys |-> Empty]
     /\ incomingEdges = [id \in txnIds |-> {}] \* Initially no incoming edges.
     /\ outgoingEdges = [id \in txnIds |-> {}] \* Initially no outgoing edges.
+    /\ concurrentTxns = [id \in txnIds |-> {}] \* Initially no concurrent transactions.
 
 (**************************************************************************************************)
 (* Helpers for querying transaction histories.                                                    *)
@@ -217,7 +222,9 @@ StartTxn(newTxnId) ==
     \* Add transaction to the set of active transactions.
     /\ runningTxns' = runningTxns \cup {newTxn}
     \* Tick the clock.
-    /\ clock' = clock + 1    
+    /\ clock' = clock + 1
+    \* Add to this transaction's set of concurrent transactions, all the running transactions.
+    /\ concurrentTxns' = [concurrentTxns EXCEPT ![newTxnId] = RunningTxnIds]
     /\ UNCHANGED <<dataStore, incomingEdges, outgoingEdges>>
                                                   
 (**************************************************************************************************)
@@ -260,6 +267,36 @@ CommitTxn(txnId) ==
     \* Remove the transaction from the active set. 
     /\ runningTxns' = {r \in runningTxns : r.id # txnId}
     /\ clock' = clock + 1
+    \* RW EDGE DETECTION
+    \* Update concurrent transactions to include:
+    \* 1. Current concurrent transactions set
+    \* 2. Currently running transactions (except self)
+    \* 3. Committed transactions that started after this transaction started
+    /\ LET myStartTime == BeginOp(txnHistory, txnId).time
+           committedAfterMyStart == {tid \in CommittedTxns(txnHistory) : 
+                                      BeginOp(txnHistory, tid).time > myStartTime}
+           updatedConcurrentSet == concurrentTxns[txnId] 
+                                  \cup (RunningTxnIds \ {txnId}) 
+                                  \cup committedAfterMyStart
+           keysReadByMe == KeysReadByTxn(txnHistory, txnId)
+           \* Find concurrent transactions that wrote to keys that txnId read
+           rwTargets == {otherTxn \in updatedConcurrentSet : 
+                           KeysWrittenByTxn(txnHistory, otherTxn) \cap keysReadByMe /= {}}
+           \* Create new RW edges
+           newOutgoingRW == {<<target, "RW">> : target \in rwTargets}
+           \* Update outgoing edges for this transaction
+           updatedOutgoing == [outgoingEdges EXCEPT ![txnId] = outgoingEdges[txnId] \cup newOutgoingRW]
+           \* Update incoming edges for the target transactions
+           updatedIncoming == [tid \in txnIds |->
+                                IF tid \in rwTargets
+                                THEN incomingEdges[tid] \cup {<<txnId, "RW">>}
+                                ELSE incomingEdges[tid]]
+           \* Update the global concurrent transactions mapping
+           updatedConcurrentTxns == [concurrentTxns EXCEPT ![txnId] = updatedConcurrentSet]
+        IN
+        /\ outgoingEdges' = updatedOutgoing
+        /\ incomingEdges' = updatedIncoming
+        /\ concurrentTxns' = updatedConcurrentTxns
     \* We can leave the snapshot around, since it won't be used again.
     /\ UNCHANGED <<txnSnapshots>>
 
@@ -300,33 +337,37 @@ TxnRead(txnId, k) ==
                     txnId |-> txnId, 
                     key   |-> k, 
                     val   |-> valRead]
-
-        \* Potential transactions that have written to the same key that this transaction reads till this point in time.
-        \* BEWARE: This does not consider the case where a transaction writes to this key after the read is performed - this is a simplification.
-        \* FIX: Can be fixed by doing the check at commit time. Will additionally need to track the start and commit times of transactions.
-        potentialRWTargets == {t.id : t \in runningTxns 
-                                /\ t.id \notin txnId 
-                                /\ \E op \in WritesByTxn(txnHistory, t.id) : op.key = k} \* Transactions that write to the same key.
-
-        \* Create the set of outgoing RW edges for this transaction.
-        newOutgoingRW == {<<other, "RW">> : other \in potentialRWTargets}
-
-        \* Updates the set of incoming edges to the writing transactions that wrote to the key that this transaction read.
-        updatedIncoming == [t \in txnIds |->
-                            IF t \in potentialRWTargets
-                            THEN incomingEdges[t] \cup {<<txnId, "RW">>}
-                            ELSE incomingEdges[t]]
-
-        \* Create the new outgoing edges for this transaction.
-        updatedOutgoing == [outgoingEdges EXCEPT ![txnId] = outgoingEdges[txnId] \cup newOutgoingRW]
-
-        IN
-        
+        \* WR EDGE DETECTION
+        \* Update the transactions's concurrent transactions set.
+        /\ LET myStartTime == BeginOp(txnHistory, txnId).time
+            committedAfterMyStart == {tid \in CommittedTxns(txnHistory) : 
+                                        BeginOp(txnHistory, tid).time > myStartTime}
+            updatedConcurrentSet == concurrentTxns[txnId] 
+                                  \cup (RunningTxnIds \ {txnId}) 
+                                  \cup committedAfterMyStart
+            keysReadByMe == KeysReadByTxn(txnHistory, txnId)
+            \* Find transactions that wrote to the keys that this transaction read. From the set of transactions that committed before this transaction started.
+            exclusiveCommitSet == {tid \in CommittedTxns(txnHistory) :
+                                CommitOp(txnHistory, tid).time < myStartTime}
+            rwTargets == {otherTxn \in exclusiveCommitSet : 
+                           KeysWrittenByTxn(txnHistory, otherTxn) \cap keysReadByMe /= {}}
+            \* Create new WR edges
+            newOutgoingWR == {<<target, "WR">> : target \in rwTargets}
+            \* Update outgoing edges for this transaction
+            updatedOutgoing == [outgoingEdges EXCEPT ![txnId] = outgoingEdges[txnId] \cup newOutgoingWR]
+            \* Update incoming edges for the target transactions
+            updatedIncoming == [tid \in txnIds |->
+                                IF tid \in rwTargets
+                                THEN incomingEdges[tid] \cup {<<txnId, "WR">>}
+                                ELSE incomingEdges[tid]]
+            \* Update the global concurrent transactions mapping
+            updatedConcurrentTxns == [concurrentTxns EXCEPT ![txnId] = updatedConcurrentSet]
+            IN
+            /\ outgoingEdges' = updatedOutgoing
+            /\ incomingEdges' = updatedIncoming
+            /\ concurrentTxns' = updatedConcurrentTxns
         /\ k \notin KeysReadByTxn(txnHistory, txnId)   
         /\ txnHistory' = Append(txnHistory, readOp)
-        \* Set the new incoming and outgoing edges for this transaction.
-        /\ incomingEdges' = updatedIncoming
-        /\ outgoingEdges' = updatedOutgoing
         /\ UNCHANGED <<dataStore, clock, runningTxns, txnSnapshots>>
                    
 TxnUpdate(txnId, k, v) == 
