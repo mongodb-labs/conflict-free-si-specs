@@ -272,6 +272,7 @@ CommitTxn(txnId) ==
     \* 1. Current concurrent transactions set
     \* 2. Currently running transactions (except self)
     \* 3. Committed transactions that started after this transaction started
+    \* 4. Aborted transactions dont matter since they are essentially invisible to the current transaction.
     /\ LET myStartTime == BeginOp(txnHistory, txnId).time
            committedAfterMyStart == {tid \in CommittedTxns(txnHistory) : 
                                       BeginOp(txnHistory, tid).time > myStartTime}
@@ -293,10 +294,29 @@ CommitTxn(txnId) ==
                                 ELSE incomingEdges[tid]]
            \* Update the global concurrent transactions mapping
            updatedConcurrentTxns == [concurrentTxns EXCEPT ![txnId] = updatedConcurrentSet]
-        IN
-        /\ outgoingEdges' = updatedOutgoing
-        /\ incomingEdges' = updatedIncoming
-        /\ concurrentTxns' = updatedConcurrentTxns
+           
+           \* WW EDGE DETECTION
+           \* Find concurrent transactions that wrote to keys that txnId also wrote to
+           keysWrittenByMe == KeysWrittenByTxn(txnHistory, txnId)
+           wwTargets == {otherTxn \in updatedConcurrentSet : 
+                           KeysWrittenByTxn(txnHistory, otherTxn) \cap keysWrittenByMe /= {}}
+           \* Create new WW edges
+           newOutgoingWW == {<<target, "WW">> : target \in wwTargets}
+           \* Update outgoing edges for this transaction (combining RW and WW edges)
+           finalOutgoing == [outgoingEdges EXCEPT ![txnId] = outgoingEdges[txnId] \cup newOutgoingRW \cup newOutgoingWW]
+           \* Update incoming edges for the target transactions (combining RW and WW targets)
+           finalIncoming == [tid \in txnIds |->
+                                IF tid \in rwTargets
+                                THEN (IF tid \in wwTargets 
+                                      THEN incomingEdges[tid] \cup {<<txnId, "RW">>, <<txnId, "WW">>}
+                                      ELSE incomingEdges[tid] \cup {<<txnId, "RW">>})
+                                ELSE (IF tid \in wwTargets
+                                      THEN incomingEdges[tid] \cup {<<txnId, "WW">>}
+                                      ELSE incomingEdges[tid])]
+       IN
+       /\ outgoingEdges' = finalOutgoing
+       /\ incomingEdges' = finalIncoming
+       /\ concurrentTxns' = updatedConcurrentTxns
     \* We can leave the snapshot around, since it won't be used again.
     /\ UNCHANGED <<txnSnapshots>>
 
