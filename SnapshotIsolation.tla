@@ -236,16 +236,23 @@ StartTxn(newTxnId) ==
 (*     [start(T0), commit(T0)] \cap [start(T1), commit(T1)] != {}                                 *)
 (**************************************************************************************************)
 
-\* Checks whether a given transaction is allowed to commit, based on whether it conflicts
-\* with other concurrent transactions that have already committed.
+\* Checks whether a given transaction is allowed to commit based on RW edge cycle prevention
 TxnCanCommit(txnId) ==
-    \E txn \in runningTxns : 
-        /\ txn.id = txnId
-        /\ ~\E op \in Range(txnHistory) :
-            /\ op.type = "commit" 
-            \* Did another transaction start after me.
-            /\ txn.id = txnId /\ op.time > txn.startTime 
-            /\ KeysWrittenByTxn(txnHistory, txnId) \cap op.updatedKeys /= {} \* Must be no conflicting keys.
+    \* Check if committing this transaction would create a dangerous cycle
+    \* Case 1: If txnId has an incoming RW edge from T1 to txnId
+    \* Check if T1 has any incoming RW edges OR if txnId has any outgoing RW edges
+    \* If BOTH are false (neither has the additional edges), then txnId must abort
+    /\ ~(\E <<t1, edgeType>> \in incomingEdges[txnId] :
+        /\ edgeType = "RW"
+        /\ ~(\E <<src, et>> \in incomingEdges[t1] : et = "RW")  \* T1 has no incoming RW edges
+        /\ ~(\E <<dst, et>> \in outgoingEdges[txnId] : et = "RW"))  \* txnId has no outgoing RW edges
+    \* Case 2: If txnId has an outgoing RW edge from txnId to T2
+    \* Check if txnId has any incoming RW edges OR if T2 has any outgoing RW edges
+    \* If BOTH are false (neither has the additional edges), then txnId must abort
+    /\ ~(\E <<t2, edgeType>> \in outgoingEdges[txnId] :
+        /\ edgeType = "RW"
+        /\ ~(\E <<src, et>> \in incomingEdges[txnId] : et = "RW")  \* txnId has no incoming RW edges
+        /\ ~(\E <<dst, et>> \in outgoingEdges[t2] : et = "RW"))  \* T2 has no outgoing RW edges
          
 CommitTxn(txnId) == 
     \* Transaction must be able to commit i.e. have no write conflicts with concurrent.
@@ -253,20 +260,6 @@ CommitTxn(txnId) ==
     /\ txnId \in RunningTxnIds
     \* Must not be a no-op transaction.
     /\ (WritesByTxn(txnHistory, txnId) \cup ReadsByTxn(txnHistory, txnId)) /= {}  
-    /\ LET commitOp == [ type          |-> "commit", 
-                         txnId         |-> txnId, 
-                         time          |-> clock + 1,
-                         updatedKeys   |-> KeysWrittenByTxn(txnHistory, txnId)] IN
-       txnHistory' = Append(txnHistory, commitOp)            
-    \* Merge this transaction's updates into the data store. If the 
-    \* transaction has updated a key, then we use its version as the new
-    \* value for that key. Otherwise the key remains unchanged.
-    /\ dataStore' = [k \in keys |-> IF k \in KeysWrittenByTxn(txnHistory, txnId) 
-                                        THEN txnSnapshots[txnId][k]
-                                        ELSE dataStore[k]]
-    \* Remove the transaction from the active set. 
-    /\ runningTxns' = {r \in runningTxns : r.id # txnId}
-    /\ clock' = clock + 1
     \* RW EDGE DETECTION
     \* Update concurrent transactions to include:
     \* 1. Current concurrent transactions set
@@ -317,7 +310,26 @@ CommitTxn(txnId) ==
        /\ outgoingEdges' = finalOutgoing
        /\ incomingEdges' = finalIncoming
        /\ concurrentTxns' = updatedConcurrentTxns
+
+    \* Check if the transaction can commit.
+    \* All data structures need to be updated incase the transaction aborts so that the information is preserved.
+    /\ TxnCanCommit(txnId)
     \* We can leave the snapshot around, since it won't be used again.
+    /\ LET commitOp == [ type          |-> "commit", 
+                         txnId         |-> txnId, 
+                         time          |-> clock + 1,
+                         updatedKeys   |-> KeysWrittenByTxn(txnHistory, txnId)] IN
+       txnHistory' = Append(txnHistory, commitOp)            
+    \* Merge this transaction's updates into the data store. If the 
+    \* transaction has updated a key, then we use its version as the new
+    \* value for that key. Otherwise the key remains unchanged.
+    /\ dataStore' = [k \in keys |-> IF k \in KeysWrittenByTxn(txnHistory, txnId) 
+                                        THEN txnSnapshots[txnId][k]
+                                        ELSE dataStore[k]]
+    \* Remove the transaction from the active set. 
+    /\ runningTxns' = {r \in runningTxns : r.id # txnId}
+    /\ clock' = clock + 1
+
     /\ UNCHANGED <<txnSnapshots>>
 
 (**************************************************************************************************)
