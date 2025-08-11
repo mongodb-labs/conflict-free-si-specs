@@ -129,8 +129,8 @@ TypeInvariant ==
     /\ runningTxns  \in SUBSET [ id : txnIds, 
                                  startTime  : Nat, 
                                  commitTime : Nat \cup {Empty}]
-    /\ incomingEdges \in [txnIds -> SUBSET (txnIds x {"WW", "WR", "RW"})] \* Map from transaction id to set of (incoming transaction, edge type) pairs.
-    /\ outgoingEdges \in [txnIds -> SUBSET (txnIds x {"WW", "WR", "RW"})] \* Map from transaction id to set of (outgoing transaction, edge type) pairs.
+    /\ incomingEdges \in [txnIds -> SUBSET (txnIds \X {"WW", "WR", "RW"})] \* Map from transaction id to set of (incoming transaction, edge type) pairs.
+    /\ outgoingEdges \in [txnIds -> SUBSET (txnIds \X {"WW", "WR", "RW"})] \* Map from transaction id to set of (outgoing transaction, edge type) pairs.
     /\ concurrentTxns \in [txnIds -> SUBSET txnIds] \* Map from transaction id to set of concurrent transaction ids. Set at begin time.
 
 Init ==  
@@ -313,7 +313,9 @@ CommitTxn(txnId) ==
 
     \* Check if the transaction can commit.
     \* All data structures need to be updated incase the transaction aborts so that the information is preserved.
-    /\ TxnCanCommit(txnId)
+
+    \* /\ TxnCanCommit(txnId)
+    
     \* We can leave the snapshot around, since it won't be used again.
     /\ LET commitOp == [ type          |-> "commit", 
                          txnId         |-> txnId, 
@@ -350,7 +352,7 @@ AbortTxn(txnId) ==
     /\ runningTxns' = {r \in runningTxns : r.id # txnId} \* transaction is no longer running.
     /\ clock' = clock + 1
     \* No changes are made to the data store.
-    /\ UNCHANGED <<dataStore, txnSnapshots>>
+    /\ UNCHANGED <<dataStore, txnSnapshots, incomingEdges, outgoingEdges, concurrentTxns>>
 
 (***************************************************************************************************)
 (* Read and write operations executed by transactions.                                            *)
@@ -365,42 +367,42 @@ TxnRead(txnId, k) ==
     \* Update the transaction's incoming and outgoing edges based on RW edge detection.
     /\ txnId \in RunningTxnIds
     /\ LET valRead == txnSnapshots[txnId][k]
-        readOp == [ type  |-> "read", 
-                    txnId |-> txnId, 
-                    key   |-> k, 
-                    val   |-> valRead]
-        \* WR EDGE DETECTION
-        \* Update the transactions's concurrent transactions set.
-        /\ LET myStartTime == BeginOp(txnHistory, txnId).time
-            committedAfterMyStart == {tid \in CommittedTxns(txnHistory) : 
-                                        BeginOp(txnHistory, tid).time > myStartTime}
-            updatedConcurrentSet == concurrentTxns[txnId] 
+           readOp == [ type  |-> "read", 
+                       txnId |-> txnId, 
+                       key   |-> k, 
+                       val   |-> valRead]
+           \* WR EDGE DETECTION
+           \* Update the transactions's concurrent transactions set.
+           myStartTime == BeginOp(txnHistory, txnId).time
+           committedAfterMyStart == {tid \in CommittedTxns(txnHistory) : 
+                                     BeginOp(txnHistory, tid).time > myStartTime}
+           updatedConcurrentSet == concurrentTxns[txnId] 
                                   \cup (RunningTxnIds \ {txnId}) 
                                   \cup committedAfterMyStart
-            keysReadByMe == KeysReadByTxn(txnHistory, txnId)
-            \* Find transactions that wrote to the keys that this transaction read. From the set of transactions that committed before this transaction started.
-            exclusiveCommitSet == {tid \in CommittedTxns(txnHistory) :
-                                CommitOp(txnHistory, tid).time < myStartTime}
-            rwTargets == {otherTxn \in exclusiveCommitSet : 
-                           KeysWrittenByTxn(txnHistory, otherTxn) \cap keysReadByMe /= {}}
-            \* Create new WR edges
-            newOutgoingWR == {<<target, "WR">> : target \in rwTargets}
-            \* Update outgoing edges for this transaction
-            updatedOutgoing == [outgoingEdges EXCEPT ![txnId] = outgoingEdges[txnId] \cup newOutgoingWR]
-            \* Update incoming edges for the target transactions
-            updatedIncoming == [tid \in txnIds |->
-                                IF tid \in rwTargets
-                                THEN incomingEdges[tid] \cup {<<txnId, "WR">>}
-                                ELSE incomingEdges[tid]]
-            \* Update the global concurrent transactions mapping
-            updatedConcurrentTxns == [concurrentTxns EXCEPT ![txnId] = updatedConcurrentSet]
-            IN
-            /\ outgoingEdges' = updatedOutgoing
-            /\ incomingEdges' = updatedIncoming
-            /\ concurrentTxns' = updatedConcurrentTxns
-        /\ k \notin KeysReadByTxn(txnHistory, txnId)   
-        /\ txnHistory' = Append(txnHistory, readOp)
-        /\ UNCHANGED <<dataStore, clock, runningTxns, txnSnapshots>>
+           keysReadByMe == KeysReadByTxn(txnHistory, txnId)
+           \* Find transactions that wrote to the keys that this transaction read. From the set of transactions that committed before this transaction started.
+           exclusiveCommitSet == {tid \in CommittedTxns(txnHistory) :
+                                  CommitOp(txnHistory, tid).time < myStartTime}
+           rwTargets == {otherTxn \in exclusiveCommitSet : 
+                         KeysWrittenByTxn(txnHistory, otherTxn) \cap keysReadByMe /= {}}
+           \* Create new WR edges
+           newOutgoingWR == {<<target, "WR">> : target \in rwTargets}
+           \* Update outgoing edges for this transaction
+           updatedOutgoing == [outgoingEdges EXCEPT ![txnId] = outgoingEdges[txnId] \cup newOutgoingWR]
+           \* Update incoming edges for the target transactions
+           updatedIncoming == [tid \in txnIds |->
+                               IF tid \in rwTargets
+                               THEN incomingEdges[tid] \cup {<<txnId, "WR">>}
+                               ELSE incomingEdges[tid]]
+           \* Update the global concurrent transactions mapping
+           updatedConcurrentTxns == [concurrentTxns EXCEPT ![txnId] = updatedConcurrentSet]
+       IN
+       /\ k \notin KeysReadByTxn(txnHistory, txnId)   
+       /\ txnHistory' = Append(txnHistory, readOp)
+       /\ outgoingEdges' = updatedOutgoing
+       /\ incomingEdges' = updatedIncoming
+       /\ concurrentTxns' = updatedConcurrentTxns
+       /\ UNCHANGED <<dataStore, clock, runningTxns, txnSnapshots>>
                    
 TxnUpdate(txnId, k, v) == 
     /\ txnId \in RunningTxnIds
@@ -413,7 +415,7 @@ TxnUpdate(txnId, k, v) ==
         /\ LET updatedSnapshot == [txnSnapshots[txnId] EXCEPT ![k] = v] IN
             txnSnapshots' = [txnSnapshots EXCEPT ![txnId] = updatedSnapshot]
         /\ txnHistory' = Append(txnHistory, writeOp)
-        /\ UNCHANGED <<dataStore, runningTxns, clock>>
+        /\ UNCHANGED <<dataStore, runningTxns, clock, concurrentTxns, incomingEdges, outgoingEdges>>
 
 (**************************************************************************************************)
 (* The next-state relation and spec definition.                                                   *)
@@ -682,6 +684,29 @@ NoReadOnlyAnomaly == ~ReadOnlyAnomaly(txnHistory)
 ---------------------------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------------------------
 
+\* Creates a serialization graph from the tracked edges in incomingEdges/outgoingEdges
+\* This uses the actual edges detected during transaction execution
+TrackedSerializationGraph == 
+    LET \* Get all transaction IDs that have participated in the history
+        allTxns == {tid \in txnIds : \E op \in Range(txnHistory) : op.txnId = tid}
+        \* Union of edges from both incoming and outgoing perspectives
+        \* For incoming edges into T: <<src, T, edgeType>>
+        incomingEdgeSet == UNION {
+            {<<src, tid, edgeType, 
+              IF AreConcurrent(txnHistory, src, tid) THEN "concurrent" ELSE "not_concurrent">> : 
+                <<src, edgeType>> \in incomingEdges[tid]}
+            : tid \in allTxns
+        }
+        \* For outgoing edges from T: <<T, dst, edgeType>>
+        outgoingEdgeSet == UNION {
+            {<<tid, dst, edgeType, 
+              IF AreConcurrent(txnHistory, tid, dst) THEN "concurrent" ELSE "not_concurrent">> : 
+                <<dst, edgeType>> \in outgoingEdges[tid]}
+            : tid \in allTxns
+        }
+    IN
+    \* Union both sets
+    incomingEdgeSet \cup outgoingEdgeSet
 
 
 (**************************************************************************************************)
@@ -1014,15 +1039,20 @@ ThreeNodeCycle ==
     )
 
 
-\* 2 node cycle with one RW edge and one WR edge
+\* 2 node cycle with one RW edge and one WW edge using tracked edges
 GSingle2Inv2NodeCycleRWWW == 
+    LET \* Create simple graph edges for cycle detection (just <<src, dst>> pairs)
+        simpleEdges == {<<src, dst>> : <<src, dst, edgeType, cclabel>> \in TrackedSerializationGraph}
+        \* Extract just the edge type information for pattern matching
+        typedEdges == {<<src, dst, edgeType>> : <<src, dst, edgeType, cclabel>> \in TrackedSerializationGraph}
+    IN
     ~(
-      /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) <= 2
-      /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 2
-      /\ \E a,b \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
+      /\ Cardinality(TrackedSerializationGraph) <= 2
+      /\ Cardinality(FindAllNodesInAnyCycle(simpleEdges)) = 2
+      /\ \E a,b \in FindAllNodesInAnyCycle(simpleEdges) :
         /\ Cardinality({a,b}) = 2
-        /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<b, a, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
+        /\ <<a, b, "RW">> \in typedEdges
+        /\ <<b, a, "WW">> \in typedEdges
     )
 
 GNonadjacentInv4NodeCycle2WR == 
@@ -1076,8 +1106,8 @@ GNonadjacentInv6NodeCycle ==
         /\ \E ty \in {"WR", "WW"} : <<f, a, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
     )
 
-ASSUME 
-    PrintT(SerializationGraphWithCC(G6NodeCycleTest))
+\* ASSUME 
+\*     PrintT(SerializationGraphWithCC(G6NodeCycleTest))
 \* /\ \E ty \in {"WR", "WW"} : <<d, a, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
 
 Invariant == GSingle2Inv2NodeCycleRWWW
@@ -1094,10 +1124,13 @@ TxnHistoryCardinality(h) ==
         edgePairs == {<<e[1], e[2]>> : e \in detailedEdges}
     IN [pair \in edgePairs |-> FindCardinality(detailedEdges, pair)]
 
+
 \* For debugging within the model checker in VSCode
 Alias == [
     txnHistory |-> txnHistory,
-    ccgraph |-> SerializationGraphWithCC(txnHistory)
+    ccgraph |-> TrackedSerializationGraph,
+    incomingEdges |-> incomingEdges,
+    outgoingEdges |-> outgoingEdges
     \* isCycle |-> IsCycle(SerializationGraph(txnHistory)),
     \* nodesSet |-> First2NodeCycle(SerializationGraph(txnHistory))
     \* edgeCardinalities |-> TxnHistoryCardinality(txnHistory)
