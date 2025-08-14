@@ -2,6 +2,8 @@
 
 This repository contains a TLA+ specification for snapshot isolation along with analysis tools for processing model checker outputs and visualizing transaction conflict graphs.
 
+Explore the spec [here](https://will62794.github.io/spectacle/#!/home?specpath=https%3A%2F%2Fraw.githubusercontent.com%2Fmongodb-labs%2Fconflict-free-si-specs%2Frefs%2Fheads%2Fmain%2FSnapshotIsolation.tla&constants%5BtxnIds%5D=%7Bt1%2Ct2%2Ct3%2Ct4%7D&constants%5Bkeys%5D=%7Bk1%2Ck2%7D&constants%5Bvalues%5D=%7Bv1%2Cv2%7D&constants%5BEmpty%5D=Empty) (4 transactions).
+
 ## 🔧 Transaction History Analysis Tool
 
 The main analysis tool (`tla_to_transaction_history.py`) processes TLA+ trace files to extract and visualize transaction histories with conflict graph filtering.
