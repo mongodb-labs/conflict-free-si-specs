@@ -1193,6 +1193,11 @@ Image(x, y, width, height, href, attrs) ==
 \* Group element. 'children' is as a sequence of elements that will be contained in this group.
 Group(children, attrs) == SVGElem("g", attrs, children, "")
 
+\* Edges can also be specified as tuples of length > 2, such as <<n1,n2,x,y,z>>,
+\* which defines an edge between n1 -> n2, but x,y,z define additional metadata
+\* specific to that edge e.g. this also allows for multiple edges between the
+\* same nodes in the same direction, but with potentially different edge
+\* "types".
 DiGraph(V, E, nodeAttrsFn, edgeAttrsFn) == SVGElem("digraph", [V |-> V, E |-> E, nodeAttrsFn |-> nodeAttrsFn, edgeAttrsFn |-> edgeAttrsFn], <<>>, "")
 
 Injective(f) == \A x, y \in DOMAIN f : f[x] = f[y] => x = y
@@ -1212,13 +1217,24 @@ nodeAttrsFn(n) == [
 ]
 
 edgeAttrsFn(e) == [
-    label |-> "", \* ToString(e[3]),
-    color |-> "black"
+    label |-> e[3],
+    color |-> "black",
+    fontsize |-> "8"
 ]
 
 txnGraph == SerializationGraph(txnHistory)
-txnGraphWithEdgeTypes == SerializationGraphWithEdgeTypes(txnHistory)
-AnimView == Group(<<DiGraph(txnIds,txnGraph,[n \in txnIds |-> nodeAttrsFn(n)], [e \in txnGraph |-> edgeAttrsFn(e)])>>, [i \in {} |-> {}])
+
+allCommittedTxnIds == CommittedTxns(txnHistory)
+
+\* Alternate def of above.
+txnGraphWithEdgeTypes == 
+    {e \in (allCommittedTxnIds \X allCommittedTxnIds \X {"WW", "WR", "RW"}):
+        /\ e[1][1] /= e[1][2]
+        /\ \/ (e[2] = "WW" /\ WWDependency(txnHistory, e[1][1], e[1][2]))
+           \/ (e[2] = "WR" /\ WRDependency(txnHistory, e[1][1], e[1][2]))
+           \/ (e[2] = "RW" /\ RWDependency(txnHistory, e[1][1], e[1][2]))}
+txnGraphEdges == {<<e[1][1], e[1][2], e[2]>> : e \in txnGraphWithEdgeTypes}
+AnimView == Group(<<DiGraph(txnIds,txnGraphEdges,[n \in txnIds |-> nodeAttrsFn(n)], [e \in txnGraphEdges |-> edgeAttrsFn(e)])>>, [i \in {} |-> {}])
 
 =============================================================================
 \* Modification History
