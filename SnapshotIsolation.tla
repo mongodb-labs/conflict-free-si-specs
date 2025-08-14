@@ -1193,7 +1193,7 @@ Image(x, y, width, height, href, attrs) ==
 \* Group element. 'children' is as a sequence of elements that will be contained in this group.
 Group(children, attrs) == SVGElem("g", attrs, children, "")
 
-DiGraph(V, E, nodeAttrsFn) == SVGElem("digraph", [V |-> V, E |-> E, nodeAttrsFn |-> nodeAttrsFn], <<>>, "")
+DiGraph(V, E, nodeAttrsFn, edgeAttrsFn) == SVGElem("digraph", [V |-> V, E |-> E, nodeAttrsFn |-> nodeAttrsFn, edgeAttrsFn |-> edgeAttrsFn], <<>>, "")
 
 Injective(f) == \A x, y \in DOMAIN f : f[x] = f[y] => x = y
 
@@ -1211,8 +1211,13 @@ nodeAttrsFn(n) == [
     fillcolor |-> IF n \in CommittedTxns(txnHistory) THEN "lightgreen" ELSE "lightgray"
 ]
 
+edgeAttrsFn(e) == [
+    label |-> ToString(e[3]),
+    color |-> "black"
+]
+
 txnGraph == SerializationGraph(txnHistory)
-AnimView == Group(<<DiGraph(txnIds,txnGraph,[n \in txnIds |-> nodeAttrsFn(n)])>>, [i \in {} |-> {}])
+AnimView == Group(<<DiGraph(txnIds,txnGraph,[n \in txnIds |-> nodeAttrsFn(n)], [e \in txnGraph |-> edgeAttrsFn(e)])>>, [i \in {} |-> {}])
 
 =============================================================================
 \* Modification History
