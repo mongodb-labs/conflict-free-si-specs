@@ -1212,11 +1212,12 @@ nodeAttrsFn(n) == [
 ]
 
 edgeAttrsFn(e) == [
-    label |-> ToString(e[3]),
+    label |-> "", \* ToString(e[3]),
     color |-> "black"
 ]
 
 txnGraph == SerializationGraph(txnHistory)
+txnGraphWithEdgeTypes == SerializationGraphWithEdgeTypes(txnHistory)
 AnimView == Group(<<DiGraph(txnIds,txnGraph,[n \in txnIds |-> nodeAttrsFn(n)], [e \in txnGraph |-> edgeAttrsFn(e)])>>, [i \in {} |-> {}])
 
 =============================================================================
