@@ -236,24 +236,20 @@ StartTxn(newTxnId) ==
 (*     [start(T0), commit(T0)] \cap [start(T1), commit(T1)] != {}                                 *)
 (**************************************************************************************************)
 
+
 \* Checks whether a given transaction is allowed to commit based on RW edge cycle prevention
-TxnCanCommit(txnId) ==
-    \* Check if committing this transaction would create a dangerous cycle
-    \* Case 1: If txnId has an incoming RW edge from T1 to txnId
-    \* Check if T1 has any incoming RW edges OR if txnId has any outgoing RW edges
-    \* If BOTH are false (neither has the additional edges), then txnId must abort
-    /\ ~(\E <<t1, edgeType>> \in incomingEdges[txnId] :
+TxnCanCommit(txnId, incoming, outgoing) ==
+    \/ \E <<inTxnId, edgeType>> \in incoming[txnId] : 
         /\ edgeType = "RW"
-        /\ ~(\E <<src, et>> \in incomingEdges[t1] : et = "RW")  \* T1 has no incoming RW edges
-        /\ ~(\E <<dst, et>> \in outgoingEdges[txnId] : et = "RW"))  \* txnId has no outgoing RW edges
-    \* Case 2: If txnId has an outgoing RW edge from txnId to T2
-    \* Check if txnId has any incoming RW edges OR if T2 has any outgoing RW edges
-    \* If BOTH are false (neither has the additional edges), then txnId must abort
-    /\ ~(\E <<t2, edgeType>> \in outgoingEdges[txnId] :
+        \/ (\E <<src, et>> \in incoming[inTxnId] : et = "RW")
+        \/ (\E <<dst, et>> \in outgoing[txnId] : et = "RW")
+
+    \/ \E <<outTxnId, edgeType>> \in outgoing[txnId] : 
         /\ edgeType = "RW"
-        /\ ~(\E <<src, et>> \in incomingEdges[txnId] : et = "RW")  \* txnId has no incoming RW edges
-        /\ ~(\E <<dst, et>> \in outgoingEdges[t2] : et = "RW"))  \* T2 has no outgoing RW edges
-         
+        \/ (\E <<src, et>> \in incoming[outTxnId] : et = "RW")
+        \/ (\E <<dst, et>> \in outgoing[txnId] : et = "RW")
+    
+        
 CommitTxn(txnId) == 
     \* Transaction must be able to commit i.e. have no write conflicts with concurrent.
     \* committed transactions.
@@ -274,6 +270,8 @@ CommitTxn(txnId) ==
                                   \cup committedAfterMyStart
            keysReadByMe == KeysReadByTxn(txnHistory, txnId)
            \* Find concurrent transactions that wrote to keys that txnId read
+           \* Of those, only consider the ones that have already committed since those are the only ones txnId can form RW edges with.
+        \*    exclusiveCommitSet == updatedConcurrentSet \cap CommittedTxns(txnHistory)
            rwTargets == {otherTxn \in updatedConcurrentSet : 
                            KeysWrittenByTxn(txnHistory, otherTxn) \cap keysReadByMe /= {}}
            \* Create new RW edges
@@ -314,8 +312,8 @@ CommitTxn(txnId) ==
     \* Check if the transaction can commit.
     \* All data structures need to be updated incase the transaction aborts so that the information is preserved.
 
-    \* /\ TxnCanCommit(txnId)
-    
+    /\ TxnCanCommit(txnId, incomingEdges', outgoingEdges')
+
     \* We can leave the snapshot around, since it won't be used again.
     /\ LET commitOp == [ type          |-> "commit", 
                          txnId         |-> txnId, 
@@ -340,11 +338,10 @@ CommitTxn(txnId) ==
 AbortTxn(txnId) ==
     \* If a transaction can't commit due to write conflicts, then it
     \* must abort.
-    /\ FALSE
     /\ txnId \in RunningTxnIds
     \* Must not be a no-op transaction.
     /\ (WritesByTxn(txnHistory, txnId) \cup ReadsByTxn(txnHistory, txnId)) /= {}
-    /\ ~TxnCanCommit(txnId)
+    /\ ~TxnCanCommit(txnId, incomingEdges, outgoingEdges)
     /\ LET abortOp == [ type   |-> "abort", 
                         txnId  |-> txnId, 
                         time   |-> clock + 1] IN    
@@ -438,7 +435,7 @@ Next ==
     \* histories, we require that a transaction does at least one operation before committing or aborting. 
     \* Assumes that the given transaction is currently running.
     \/ \E tid \in txnIds : CommitTxn(tid)
-    \* \/ \E tid \in txnIds : AbortTxn(tid)
+    \/ \E tid \in txnIds : AbortTxn(tid)
     \* Transaction reads or writes a key. We limit transactions
     \* to only read or write the same key once.
     \/ \E tid \in txnIds, k \in keys : TxnRead(tid, k)
@@ -1009,7 +1006,7 @@ GSingleInv3NodeCycleAllEdges ==
       /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 3
       /\ \E a,b,c \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
         /\ Cardinality({a,b,c}) = 3
-        \* /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
+        \* /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)n
         \* /\ <<b, c, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
         \* /\ <<c, a, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
     )
@@ -1028,31 +1025,44 @@ GSingleInv3NodeCycleOnlyRWWR ==
 
 \* 3 node cycle with exactly one RW edge, one WW edge, and one WR edge
 ThreeNodeCycle == 
-    ~(
-      /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) = 3
-      /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 3
-      /\ \E a,b,c \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
-        /\ Cardinality({a,b,c}) = 3
-        \* /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        \* /\ <<b, c, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        \* /\ <<c, a, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-    )
-
-
-\* 2 node cycle with one RW edge and one WW edge using tracked edges
-GSingle2Inv2NodeCycleRWWW == 
     LET \* Create simple graph edges for cycle detection (just <<src, dst>> pairs)
         simpleEdges == {<<src, dst>> : <<src, dst, edgeType, cclabel>> \in TrackedSerializationGraph}
         \* Extract just the edge type information for pattern matching
         typedEdges == {<<src, dst, edgeType>> : <<src, dst, edgeType, cclabel>> \in TrackedSerializationGraph}
+        \* Get nodes involved in cycles
+        cycleNodes == FindAllNodesInAnyCycle(simpleEdges)
     IN
     ~(
-      /\ Cardinality(TrackedSerializationGraph) <= 2
-      /\ Cardinality(FindAllNodesInAnyCycle(simpleEdges)) = 2
-      /\ \E a,b \in FindAllNodesInAnyCycle(simpleEdges) :
-        /\ Cardinality({a,b}) = 2
-        /\ <<a, b, "RW">> \in typedEdges
-        /\ <<b, a, "WW">> \in typedEdges
+      /\ TrackedSerializationGraph /= {}  \* Must have some edges
+      /\ Cardinality(TrackedSerializationGraph) = 3  \* Exactly 2 edges for bidirectional RW cycle
+      /\ Cardinality(cycleNodes) = 3  \* Exactly 2 nodes in the cycle
+      /\ \E a, b, c \in cycleNodes :
+        /\ a /= b  \* Different nodes
+        /\ a /= c
+        /\ b /= c
+        /\ <<a, b, "RW">> \in typedEdges  \* a → b is RW edge
+        /\ <<b, c, "RW">> \in typedEdges  \* b → c is RW edge
+        /\ <<c, a, "WW">> \in typedEdges  \* c → a is WW edge
+    )
+
+
+\* 2 node cycle with one RW edge and one WW edge using tracked edges
+GSingle2Inv2NodeCycleRWRW == 
+    LET \* Create simple graph edges for cycle detection (just <<src, dst>> pairs)
+        simpleEdges == {<<src, dst>> : <<src, dst, edgeType, cclabel>> \in TrackedSerializationGraph}
+        \* Extract just the edge type information for pattern matching
+        typedEdges == {<<src, dst, edgeType>> : <<src, dst, edgeType, cclabel>> \in TrackedSerializationGraph}
+        \* Get nodes involved in cycles
+        cycleNodes == FindAllNodesInAnyCycle(simpleEdges)
+    IN
+    ~(
+      /\ TrackedSerializationGraph /= {}  \* Must have some edges
+      /\ Cardinality(TrackedSerializationGraph) = 2  \* Exactly 2 edges for bidirectional RW cycle
+      /\ Cardinality(cycleNodes) = 2  \* Exactly 2 nodes in the cycle
+      /\ \E a, b \in cycleNodes :
+        /\ a /= b  \* Different nodes
+        /\ <<a, b, "RW">> \in typedEdges  \* a → b is RW edge
+        /\ <<b, a, "RW">> \in typedEdges  \* b → a is RW edge
     )
 
 GNonadjacentInv4NodeCycle2WR == 
@@ -1106,12 +1116,11 @@ GNonadjacentInv6NodeCycle ==
         /\ \E ty \in {"WR", "WW"} : <<f, a, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
     )
 
-\* ASSUME 
-\*     PrintT(SerializationGraphWithCC(G6NodeCycleTest))
+ASSUME 
+    PrintT(SerializationGraph(WriteSkewAnomalyTest))
 \* /\ \E ty \in {"WR", "WW"} : <<d, a, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
 
-Invariant == GSingle2Inv2NodeCycleRWWW
-
+Invariant == ThreeNodeCycle \*GSingle2Inv2NodeCycleRWRW
 
 \* Find the cardinality of a given edge pair in the edge set
 FindCardinality(edges, pair) ==
@@ -1130,10 +1139,8 @@ Alias == [
     txnHistory |-> txnHistory,
     ccgraph |-> TrackedSerializationGraph,
     incomingEdges |-> incomingEdges,
-    outgoingEdges |-> outgoingEdges
-    \* isCycle |-> IsCycle(SerializationGraph(txnHistory)),
-    \* nodesSet |-> First2NodeCycle(SerializationGraph(txnHistory))
-    \* edgeCardinalities |-> TxnHistoryCardinality(txnHistory)
+    outgoingEdges |-> outgoingEdges,
+    canCommit |-> [txnId \in txnIds |-> TxnCanCommit(txnId, incomingEdges, outgoingEdges)]
 ]
 
 
