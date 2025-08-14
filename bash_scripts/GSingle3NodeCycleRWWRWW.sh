@@ -29,7 +29,7 @@ rm -f SnapshotIsolation_TTrace_*.bin SnapshotIsolation_TTrace_*.tla
 rm -f ../traces/read_only_anomaly.txt
 
 # Run TLC directly with cleanup flag
-./tlc -simulate -cleanup -gzip -workers 10 -dumpTrace json ../traces/trace-${INVARIANT}.json -config SnapshotIsolation.cfg ../SnapshotIsolation.tla
+./tlc -simulate -cleanup -gzip -workers 10 -deadlock -dumpTrace json ../traces/trace-${INVARIANT}.json -config SnapshotIsolation.cfg ../SnapshotIsolation.tla
 
 # Check if trace file was generated and run visualization
 TRACE_FILE="../traces/trace-${INVARIANT}.json"

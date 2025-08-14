@@ -4,7 +4,7 @@
 # Compatible with older bash versions
 
 # Define the invariant to test
-INVARIANT="GSingle2Inv2NodeCycleRWWW"
+INVARIANT="GSingle2Inv2NodeCycleRWRW"
 
 echo "Running TLC for invariant: ${INVARIANT}"
 # Create config file for this invariant
@@ -13,7 +13,7 @@ INIT Init
 NEXT Next
 CONSTANTS
     Empty = Empty
-    txnIds = {t0, t1, t2}
+    txnIds = {t0, t1}
     keys = {k1, k2, k3, k4, k5, k6}  
     values = {v1, v2}
 INVARIANT ${INVARIANT}
@@ -29,7 +29,7 @@ rm -f SnapshotIsolation_TTrace_*.bin SnapshotIsolation_TTrace_*.tla
 rm -f ../traces/read_only_anomaly.txt
 
 # Run TLC directly with cleanup flag
-./tlc -simulate -cleanup -gzip -workers 10 -dumpTrace json ../traces/trace-${INVARIANT}.json -config SnapshotIsolation.cfg ../SnapshotIsolation.tla
+./tlc -simulate -cleanup -gzip -workers 10 -deadlock -dumpTrace json ../traces/trace-${INVARIANT}.json -config SnapshotIsolation.cfg ../SnapshotIsolation.tla
 
 # Check if trace file was generated and run visualization
 TRACE_FILE="../traces/trace-${INVARIANT}.json"
