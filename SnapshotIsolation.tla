@@ -239,13 +239,17 @@ StartTxn(newTxnId) ==
 
 \* Checks whether a given transaction is allowed to commit based on RW edge cycle prevention
 TxnCanCommit(txnId, incoming, outgoing) ==
+    \/ incoming[txnId] = {}  \* If incoming edge set is empty, return True
+    \/ ~(\E <<inTxnId, edgeType>> \in incoming[txnId] : edgeType = "RW")  \* If no RW edges in incoming, return True
     \/ \E <<inTxnId, edgeType>> \in incoming[txnId] : 
         /\ edgeType = "RW"
-        \/ (/\ incoming[inTxnId] /= {} 
-            /\ \E <<src, et>> \in incoming[inTxnId] : et = "RW")
-        \/ (/\ outgoing[txnId] /= {} 
-            /\ \E <<dst, et>> \in outgoing[txnId] : et = "RW")
+        /\ (\/ (/\ incoming[inTxnId] /= {} 
+               /\ \E <<src, et>> \in incoming[inTxnId] : et = "RW")
+            \/ (/\ outgoing[txnId] /= {} 
+               /\ \E <<dst, et>> \in outgoing[txnId] : et = "RW"))
 
+    \/ outgoing[txnId] = {}  \* If outgoing edge set is empty, return True
+    \/ ~(\E <<outTxnId, edgeType>> \in outgoing[txnId] : edgeType = "RW")  \* If no RW edges in outgoing, return True
     \/ \E <<outTxnId, edgeType>> \in outgoing[txnId] : 
         /\ edgeType = "RW"
         \/ (/\ incoming[outTxnId] /= {} 
