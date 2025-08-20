@@ -241,13 +241,17 @@ StartTxn(newTxnId) ==
 TxnCanCommit(txnId, incoming, outgoing) ==
     \/ \E <<inTxnId, edgeType>> \in incoming[txnId] : 
         /\ edgeType = "RW"
-        \/ (\E <<src, et>> \in incoming[inTxnId] : et = "RW")
-        \/ (\E <<dst, et>> \in outgoing[txnId] : et = "RW")
+        \/ (/\ incoming[inTxnId] /= {} 
+            /\ \E <<src, et>> \in incoming[inTxnId] : et = "RW")
+        \/ (/\ outgoing[txnId] /= {} 
+            /\ \E <<dst, et>> \in outgoing[txnId] : et = "RW")
 
     \/ \E <<outTxnId, edgeType>> \in outgoing[txnId] : 
         /\ edgeType = "RW"
-        \/ (\E <<src, et>> \in incoming[outTxnId] : et = "RW")
-        \/ (\E <<dst, et>> \in outgoing[txnId] : et = "RW")
+        \/ (/\ incoming[outTxnId] /= {} 
+            /\ \E <<src, et>> \in incoming[outTxnId] : et = "RW")
+        \/ (/\ outgoing[txnId] /= {} 
+            /\ \E <<dst, et>> \in outgoing[txnId] : et = "RW")
     
         
 CommitTxn(txnId) == 
@@ -671,40 +675,6 @@ ReadOnlyAnomaly(h) ==
 IsConflictSerializableInv == IsConflictSerializable(txnHistory)
 NoReadOnlyAnomaly == ~ReadOnlyAnomaly(txnHistory)
 
-(**************************************************************************************************)
-(* Checks if a given history contains a "write skew" anomaly.  In other words, is this a          *)
-(* non-serializable transaction history such that it contains two transactions T1, T2, where T1   *)
-(* writes to a key that T2 also writes to, and T1 commits before T2 starts.                      *)
-(**************************************************************************************************)
-
----------------------------------------------------------------------------------------------------
----------------------------------------------------------------------------------------------------
----------------------------------------------------------------------------------------------------
-
-\* Creates a serialization graph from the tracked edges in incomingEdges/outgoingEdges
-\* This uses the actual edges detected during transaction execution
-TrackedSerializationGraph == 
-    LET \* Get all transaction IDs that have participated in the history
-        allTxns == {tid \in txnIds : \E op \in Range(txnHistory) : op.txnId = tid}
-        \* Union of edges from both incoming and outgoing perspectives
-        \* For incoming edges into T: <<src, T, edgeType>>
-        incomingEdgeSet == UNION {
-            {<<src, tid, edgeType, 
-              IF AreConcurrent(txnHistory, src, tid) THEN "concurrent" ELSE "not_concurrent">> : 
-                <<src, edgeType>> \in incomingEdges[tid]}
-            : tid \in allTxns
-        }
-        \* For outgoing edges from T: <<T, dst, edgeType>>
-        outgoingEdgeSet == UNION {
-            {<<tid, dst, edgeType, 
-              IF AreConcurrent(txnHistory, tid, dst) THEN "concurrent" ELSE "not_concurrent">> : 
-                <<dst, edgeType>> \in outgoingEdges[tid]}
-            : tid \in allTxns
-        }
-    IN
-    \* Union both sets
-    incomingEdgeSet \cup outgoingEdgeSet
-
 
 (**************************************************************************************************)
 (* View Serializability (Experimental).                                                           *)
@@ -924,35 +894,6 @@ G6NodeCycleTest == <<
 (* snapshot isolation.                                                                            *)
 (**************************************************************************************************)
 
-\* Returns TRUE if there is a simple cycle of length 3 in the edge set
-Nodes(edges) == {e[1] : e \in edges} \cup {e[2] : e \in edges}
-
-
-\* Returns TRUE if there is a simple cycle of length 2 in the edge set
-Has2NodeCycle(edges) ==
-    LET edgePairs == {<<e[1], e[2]>> : e \in edges}
-    IN \E a \in Nodes(edges) :
-         \E b \in Nodes(edges) :
-           /\ a /= b
-           /\ <<a, b>> \in edgePairs
-           /\ <<b, a>> \in edgePairs
-           /\ Cardinality({p \in edgePairs : p = <<a, b>>}) = 1
-           /\ Cardinality({p \in edgePairs : p = <<b, a>>}) = 1
-
-\* Returns TRUE if there is a simple cycle of length 3 in the edge set
-Has3NodeCycle(edges) ==
-    \* LET edgePairs == {<<e[1], e[2]>> : e \in edges}
-    \E a \in Nodes(edges) :
-         \E b \in Nodes(edges) :
-           \E c \in Nodes(edges) :
-          /\ a /= b /\ b /= c /\ c /= a
-          /\ <<a, b>> \in edges
-          /\ <<b, c>> \in edges
-          /\ <<c, a>> \in edges
-        \*   /\ Cardinality({p \in edgePairs : p = <<a, b>>}) = 1
-        \*   /\ Cardinality({p \in edgePairs : p = <<b, c>>}) = 1
-        \*   /\ Cardinality({p \in edgePairs : p = <<c, a>>}) = 1
-
 \* Returns the serialization graph with edge types.
 SerializationGraphWithEdgeTypes(history) == 
     LET committedTxnIds == CommittedTxns(history) IN
@@ -973,154 +914,19 @@ SerializationGraphWithCC(history) ==
            \/ (edgeType = "RW" /\ RWDependency(history, t1, t2))
         /\ cclabel = IF AreConcurrent(history, t1, t2) THEN "concurrent" ELSE "not_concurrent"}
 
-\* Returns the set of 2-node cycles found in the edge set
-\* Each cycle is represented as a set of 2 nodes {a, b}
-Find2NodeCycles(edges) ==
-    LET nodeSet == Nodes(edges)
-    IN { <<a, b>> \in (nodeSet \X nodeSet):
-        /\ a /= b
-        /\ <<a, b>> \in edges
-        /\ <<b, a>> \in edges }
-
-\* Returns the first 3-node cycle found (for debugging/display purposes)
-First2NodeCycle(edges) ==
-    CHOOSE cycle \in Find2NodeCycles(edges) : TRUE
-
-
-HasSingleRWEdge(edges) ==
-    LET simpleEdges == {<<e[1], e[2]>> : e \in edges}
-    IN \E a \in Nodes(edges) :
-         \E b \in Nodes(edges) :
-           /\ a /= b
-           /\ <<a, b>> \in simpleEdges
-           /\ <<b, a>> \in simpleEdges
-           /\ Cardinality({e \in edges : 
-                              /\ (<<e[1], e[2]>> = <<a, b>> \/ <<e[1], e[2]>> = <<b, a>>)
-                              /\ e[3] = "RW"}) = 1
-
-\* 3 node cycle with one RW edge, one WR edge, and one WW edge
-GSingleInv3NodeCycleAllEdges == 
-    ~(
-      /\ ~Has2NodeCycle(SerializationGraph(txnHistory))
-      /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) <= 3
-      /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 3
-      /\ \E a,b,c \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
-        /\ Cardinality({a,b,c}) = 3
-        \* /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)n
-        \* /\ <<b, c, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        \* /\ <<c, a, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-    )
-
-\* 3 node cycle with one RW edge and two WW edges
-GSingleInv3NodeCycleOnlyRWWR == 
-    ~(
-      /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) <= 3
-      /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 3
-      /\ \E a,b,c \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
-        /\ Cardinality({a,b,c}) = 3
-        /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<b, c, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<c, a, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
-    )
-
-\* 3 node cycle with exactly one RW edge, one WW edge, and one WR edge
-ThreeNodeCycle == 
-    LET \* Create simple graph edges for cycle detection (just <<src, dst>> pairs)
-        simpleEdges == {<<src, dst>> : <<src, dst, edgeType, cclabel>> \in TrackedSerializationGraph}
-        \* Extract just the edge type information for pattern matching
-        typedEdges == {<<src, dst, edgeType>> : <<src, dst, edgeType, cclabel>> \in TrackedSerializationGraph}
-        \* Get nodes involved in cycles
-        cycleNodes == FindAllNodesInAnyCycle(simpleEdges)
-    IN
-    ~(
-      /\ TrackedSerializationGraph /= {}  \* Must have some edges
-      /\ Cardinality(TrackedSerializationGraph) = 3  \* Exactly 2 edges for bidirectional RW cycle
-      /\ Cardinality(cycleNodes) = 3  \* Exactly 2 nodes in the cycle
-      /\ \E a, b, c \in cycleNodes :
-        /\ a /= b  \* Different nodes
-        /\ a /= c
-        /\ b /= c
-        /\ <<a, b, "RW">> \in typedEdges  \* a → b is RW edge
-        /\ <<b, c, "RW">> \in typedEdges  \* b → c is RW edge
-        /\ <<c, a, "WW">> \in typedEdges  \* c → a is WW edge
-    )
-
 
 \* 2 node cycle with one RW edge and one WW edge using tracked edges
-GSingle2Inv2NodeCycleRWRW == 
-    LET \* Create simple graph edges for cycle detection (just <<src, dst>> pairs)
-        simpleEdges == {<<src, dst>> : <<src, dst, edgeType, cclabel>> \in TrackedSerializationGraph}
-        \* Extract just the edge type information for pattern matching
-        typedEdges == {<<src, dst, edgeType>> : <<src, dst, edgeType, cclabel>> \in TrackedSerializationGraph}
-        \* Get nodes involved in cycles
-        cycleNodes == FindAllNodesInAnyCycle(simpleEdges)
-    IN
+WriteSkewAnomaly == 
     ~(
-      /\ TrackedSerializationGraph /= {}  \* Must have some edges
-      /\ Cardinality(TrackedSerializationGraph) = 2  \* Exactly 2 edges for bidirectional RW cycle
-      /\ Cardinality(cycleNodes) = 2  \* Exactly 2 nodes in the cycle
-      /\ \E a, b \in cycleNodes :
-        /\ a /= b  \* Different nodes
-        /\ <<a, b, "RW">> \in typedEdges  \* a → b is RW edge
-        /\ <<b, a, "RW">> \in typedEdges  \* b → a is RW edge
-    )
-
-GNonadjacentInv4NodeCycle2WR == 
-    ~(
-      /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) <= 4
-      /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 4
-      /\ \E a,b,c,d \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
-        /\ Cardinality({a,b,c,d}) = 4
+      /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) <= 2
+      /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 2
+      /\ \E a,b \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
+        /\ Cardinality({a,b}) = 2
         /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<b, c, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<c, d, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<d, a, "WW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-    )
-    
-GNonadjacentInv4NodeCycleWRRW == 
-    ~(
-      /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) <= 4
-      /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 4
-      /\ \E a,b,c,d \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
-        /\ Cardinality({a,b,c,d}) = 4
-        /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ \E ty \in {"WR", "WW"} : <<b, c, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ \E ty \in {"WR", "WW"} : <<c, d, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<d, a, "WR">> \in SerializationGraphWithEdgeTypes(txnHistory)
+        /\ <<b, a, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
     )
 
-GNonadjacentInv5NodeCycle == 
-    ~(
-      /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) <= 5
-      /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 5
-      /\ \E a,b,c,d,e \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
-        /\ Cardinality({a,b,c,d,e}) = 5
-        /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ \E ty \in {"WR", "WW"} : <<b, c, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ \E ty \in {"WR", "WW"} : <<c, d, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ \E ty \in {"WR", "WW"} : <<d, e, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ \E ty \in {"WR", "WW"} : <<e, a, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
-    )
-
-GNonadjacentInv6NodeCycle == 
-    ~(
-      /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) <= 6
-      /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 6
-      /\ \E a,b,c,d,e,f \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
-        /\ Cardinality({a,b,c,d,e,f}) = 6
-        /\ <<a, b, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ \E ty \in {"WR", "WW"} : <<b, c, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ <<c, d, "RW">> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ \E ty \in {"WR", "WW"} : <<d, e, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ \E ty \in {"WR", "WW"} : <<e, f, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
-        /\ \E ty \in {"WR", "WW"} : <<f, a, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
-    )
-
-ASSUME 
-    PrintT(SerializationGraph(WriteSkewAnomalyTest))
-\* /\ \E ty \in {"WR", "WW"} : <<d, a, ty>> \in SerializationGraphWithEdgeTypes(txnHistory)
-
-Invariant == ThreeNodeCycle \*GSingle2Inv2NodeCycleRWRW
+Invariant == WriteSkewAnomaly
 
 \* Find the cardinality of a given edge pair in the edge set
 FindCardinality(edges, pair) ==
@@ -1137,11 +943,19 @@ TxnHistoryCardinality(h) ==
 \* For debugging within the model checker in VSCode
 Alias == [
     txnHistory |-> txnHistory,
-    ccgraph |-> TrackedSerializationGraph,
+    ccgraph |-> SerializationGraphWithCC(txnHistory),
     incomingEdges |-> incomingEdges,
     outgoingEdges |-> outgoingEdges,
     canCommit |-> [txnId \in txnIds |-> TxnCanCommit(txnId, incomingEdges, outgoingEdges)]
 ]
+
+
+
+
+
+
+
+
 
 
 -------------------------------------------------

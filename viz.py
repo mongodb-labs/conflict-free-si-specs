@@ -31,14 +31,26 @@ def visualize_sergraph(trace_file="traces/trace-ThreeNodeCycle.json", output_nam
     for edge in ccgraph:
         src = edge[0]
         target = edge[1]
-        etype = edge[2]
-        cclabel = edge[3]
+        
+        # Handle different edge formats
+        if len(edge) >= 4:
+            # Full format: <<src, target, etype, cclabel>>
+            etype = edge[2]
+            cclabel = edge[3]
+            if cclabel == "concurrent":
+                label = etype + "(C)"
+            else:
+                label = etype + "(NC)"
+        elif len(edge) >= 3:
+            # Edge with type: <<src, target, etype>>
+            etype = edge[2]
+            label = etype
+        else:
+            # Basic edge: <<src, target>>
+            label = ""
+        
         dot.node(src)
         dot.node(target)
-        if cclabel == "concurrent":
-            label = etype + "(C)"
-        else:
-            label = etype + "(NC)"
         dot.edge(src, target, label=label)
     
     # Save the graph (only PNG, no DOT file)

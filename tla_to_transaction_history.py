@@ -454,7 +454,7 @@ def create_svg_visualization(transactions: List[Transaction], title: str = "Tran
     return '\n'.join(svg_parts)
 
 
-def process_single_file(input_file: str, output_base: str) -> bool:
+def process_single_file(input_file: str, output_base: str, svg_base: str = None) -> bool:
     """Process a single trace file and generate outputs.
     
     Args:
@@ -465,20 +465,13 @@ def process_single_file(input_file: str, output_base: str) -> bool:
         True if successful, False otherwise
     """
     output_file = f"{output_base}.txt"
-    svg_file = f"{output_base}.svg"
+    svg_file = f"{svg_base}.svg" if svg_base else f"{output_base}.svg"
     png_file = f"{output_base}.png"
-    
-    print(f"Converting {input_file} to dbdiag format -> {output_file}")
     
     # Extract ccgraph transactions (only for JSON files)
     ccgraph_txns = None
     if input_file.endswith('.json'):
         ccgraph_txns = extract_ccgraph_transactions(input_file)
-        if ccgraph_txns:
-            print(f"Found ccgraph with transactions: {sorted(ccgraph_txns)}")
-            print(f"Filtering to only include transactions in the conflict graph")
-        else:
-            print("No ccgraph found - including all transactions")
     
     # Extract final transaction history
     final_history = extract_final_txnhistory(input_file)
@@ -495,76 +488,45 @@ def process_single_file(input_file: str, output_base: str) -> bool:
         print("Failed to convert transaction history to dbdiag format.")
         return False
     
-    # Write output
+    # Generate visualization directly from in-memory content
     try:
-        # Ensure directory exists
-        output_dir = os.path.dirname(output_file)
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
+        # Use dbdiag content directly from memory
+        content = '\n'.join(dbdiag_lines)
         
-        with open(output_file, 'w') as f:
-            for line in dbdiag_lines:
-                f.write(line + '\n')
+        print("Generating visualization...")
+        transactions = parse_transaction_history(content)
         
-        print(f"Conversion completed successfully!")
-        print(f"dbdiag format output written to: {output_file}")
-        print(f"Generated {len(dbdiag_lines)} transaction operations")
+        if not transactions:
+            print("No transactions found for visualization")
+            return True  # Still consider it successful if conversion worked
         
-        # Generate visualization
-        try:
-            # Read transaction history
-            with open(output_file, 'r') as f:
-                content = f.read()
-            
-            print("\nGenerating visualization...")
-            transactions = parse_transaction_history(content)
-            
-            if not transactions:
-                print("No transactions found for visualization")
-                return True  # Still consider it successful if conversion worked
-            
-            print(f"Found {len(transactions)} transactions")
-            
-            # Create visualization
-            svg_content = create_svg_visualization(transactions, "Transaction History Visualization")
-            
-            # Ensure directories exist
-            svg_dir = os.path.dirname(svg_file)
-            png_dir = os.path.dirname(png_file)
-            if svg_dir:
-                os.makedirs(svg_dir, exist_ok=True)
-            if png_dir:
-                os.makedirs(png_dir, exist_ok=True)
-            
-            # Write SVG file
-            with open(svg_file, 'w') as f:
-                f.write(svg_content)
-            print(f"✓ Generated {svg_file}")
-            
-            # Try to convert to PNG
-            cmd = f"rsvg-convert -w 1200 --keep-aspect-ratio -f png -o '{png_file}' '{svg_file}'"
-            result = os.system(cmd)
-            
-            if result == 0:
-                print(f"✓ Generated {png_file}")
-            else:
-                print(f"⚠ Could not convert to PNG. Install librsvg2-bin for PNG conversion.")
-            
-        except Exception as e:
-            print(f"Error generating visualization: {e}")
-            # Don't fail the whole process if visualization fails
+        # Create visualization
+        svg_content = create_svg_visualization(transactions, "Transaction History Visualization")
+        
+        # Ensure directories exist
+        svg_dir = os.path.dirname(svg_file)
+        png_dir = os.path.dirname(png_file)
+        if svg_dir:
+            os.makedirs(svg_dir, exist_ok=True)
+        if png_dir:
+            os.makedirs(png_dir, exist_ok=True)
+        
+        # Write SVG file
+        with open(svg_file, 'w') as f:
+            f.write(svg_content)
         
         return True
-            
+        
     except Exception as e:
-        print(f"Error writing output file: {e}")
-        return False
+        print(f"Error generating visualization: {e}")
+        # Don't fail the whole process if visualization fails
+        return True
 
 def process_all_traces():
     """Process all JSON trace files in the traces directory."""
     
-    # Find all JSON files in traces directory (one level up)
-    trace_files = glob.glob("../traces/*.json")
+    # Find all JSON files in traces directory
+    trace_files = glob.glob("traces/*.json")
     
     if not trace_files:
         print("No trace files found in traces/ directory")
@@ -576,7 +538,6 @@ def process_all_traces():
     print()
     
     # Create output directories
-    os.makedirs("output/dbdiag_outputs", exist_ok=True)
     os.makedirs("output/visualizations", exist_ok=True)
     os.makedirs("output/images", exist_ok=True)
     
@@ -584,34 +545,32 @@ def process_all_traces():
     
     for trace_file in trace_files:
         trace_name = os.path.splitext(os.path.basename(trace_file))[0]
+        # Remove "trace-" prefix if present
+        if trace_name.startswith("trace-"):
+            anomaly_name = trace_name[6:]  # Remove "trace-" prefix
+        else:
+            anomaly_name = trace_name
+        
         print(f"\n{'='*60}")
         print(f"Processing: {trace_file}")
         print(f"{'='*60}\n")
         
-        # Generate output paths
-        output_base = f"output/dbdiag_outputs/{trace_name}"
-        svg_base = f"output/visualizations/{trace_name}"
-        png_base = f"output/images/{trace_name}"
+        # Generate output paths using anomaly name without "trace-" prefix
+        output_base = f"output/dbdiag_outputs/{anomaly_name}"
+        svg_base = f"output/visualizations/{anomaly_name}"
+        png_base = f"output/images/{anomaly_name}"
         
         # Process the file
-        if process_single_file(trace_file, output_base):
-            # Move visualization files to correct locations
-            try:
-                if os.path.exists(f"{output_base}.svg"):
-                    os.rename(f"{output_base}.svg", f"{svg_base}.svg")
-                if os.path.exists(f"{output_base}.png"):
-                    os.rename(f"{output_base}.png", f"{png_base}.png")
-                success_count += 1
-            except Exception as e:
-                print(f"Error moving visualization files: {e}")
+        if process_single_file(trace_file, output_base, svg_base):
+            success_count += 1
         
     print(f"\n{'='*60}")
     print(f"Batch processing complete!")
     print(f"Successfully processed {success_count}/{len(trace_files)} trace files")
     print(f"\nOutput locations:")
-    print(f"  - dbdiag format files: output/dbdiag_outputs/")
     print(f"  - SVG visualizations: output/visualizations/")
-    print(f"  - PNG images: output/images/")
+    print(f"  - PNG images: output/images/ (disabled)")
+    print(f"  - dbdiag format files: generated in memory only")
     print(f"{'='*60}")
     
     return success_count == len(trace_files)
@@ -626,26 +585,26 @@ def main():
         print("Usage: python tla_to_transaction_history.py [trace_file | all]")
         print()
         print("Arguments:")
-        print("  trace_file   JSON trace file from ../traces/ directory")
-        print("  all          Process all trace files in ../traces/ directory (default)")
+        print("  trace_file   JSON trace file from traces/ directory")
+        print("  all          Process all trace files in traces/ directory (default)")
         print()
         print("Output:")
-        print("  output/dbdiag_outputs/<trace_name>.txt - dbdiag format files")
         print("  output/visualizations/<trace_name>.svg - SVG visualizations")
-        print("  output/images/<trace_name>.png - PNG images")
+        print("  output/images/<trace_name>.png - PNG images (disabled)")
+        print("  Note: dbdiag format files are generated in memory only")
         print()
         print("Supported input formats:")
         print("  - JSON trace files (.json files) - preferred")
         print("  - TLA+ model checker text output (.out files)")
         print()
         print("Available trace files:")
-        print("  - ../traces/trace-GSingle2Inv2NodeCycleRWWW.json")
-        print("  - ../traces/trace-ThreeNodeCycle.json")
+        print("  - traces/trace-GSingle2Inv2NodeCycleRWWW.json")
+        print("  - traces/trace-ThreeNodeCycle.json")
         print()
         print("Examples:")
         print("  python tla_to_transaction_history.py                               # Process all traces")
         print("  python tla_to_transaction_history.py all                           # Process all traces")
-        print("  python tla_to_transaction_history.py ../traces/trace-ThreeNodeCycle.json  # Process specific file")
+        print("  python tla_to_transaction_history.py traces/trace-ThreeNodeCycle.json  # Process specific file")
         return
     
     # Handle arguments - only process trace files from traces directory
@@ -661,8 +620,14 @@ def main():
             input_file = sys.argv[1]
             # Extract base name for output files
             trace_name = os.path.splitext(os.path.basename(input_file))[0]
-            output_base = f"output/dbdiag_outputs/{trace_name}"
-            success = process_single_file(input_file, output_base)
+            # Remove "trace-" prefix if present
+            if trace_name.startswith("trace-"):
+                anomaly_name = trace_name[6:]
+            else:
+                anomaly_name = trace_name
+            output_base = f"output/dbdiag_outputs/{anomaly_name}"
+            svg_base = f"output/visualizations/{anomaly_name}"
+            success = process_single_file(input_file, output_base, svg_base)
     else:
         print("Usage: python tla_to_transaction_history.py [trace_file | all]")
         print("Use --help for more information.")

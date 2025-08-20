@@ -1,44 +1,12 @@
 # Snapshot Isolation Analysis with TLA+
 
 This repository contains a TLA+ specification for snapshot isolation along with analysis tools for processing model checker outputs and visualizing transaction conflict graphs.
+This 
 
 Explore the spec [here](https://will62794.github.io/spectacle/#!/home?specpath=https%3A%2F%2Fraw.githubusercontent.com%2Fmongodb-labs%2Fconflict-free-si-specs%2Frefs%2Fheads%2Fmain%2FSnapshotIsolation.tla&constants%5BtxnIds%5D=%7Bt1%2Ct2%2Ct3%2Ct4%7D&constants%5Bkeys%5D=%7Bk1%2Ck2%7D&constants%5Bvalues%5D=%7Bv1%2Cv2%7D&constants%5BEmpty%5D=Empty) (4 transactions).
 
-## 🔧 Transaction History Analysis Tool
 
-The main analysis tool (`tla_to_transaction_history.py`) processes TLA+ trace files to extract and visualize transaction histories with conflict graph filtering.
 
-### Quick Start
-
-```bash
-# Navigate to the analysis tools directory
-cd db_diagram
-
-# Using the helper script (recommended)
-./analyze.sh           # Process all trace files (default)
-./analyze.sh analyze   # Process all trace files  
-./analyze.sh clean     # Clean up generated files
-
-# Or use the Python script directly
-python3 tla_to_transaction_history.py                                    # Process all traces (default)
-python3 tla_to_transaction_history.py all                                # Process all traces
-python3 tla_to_transaction_history.py ../traces/trace-ThreeNodeCycle.json # Process specific file
-python3 tla_to_transaction_history.py --help                             # Get help
-```
-
-### Key Features
-
-- **🔍 Conflict Graph Filtering**: Automatically extracts `ccgraph` and filters to only relevant transactions
-- **📊 Timeline Visualization**: Generates clean SVG/PNG visualizations of transaction histories  
-- **📝 dbdiag Format**: Converts to standardized format for analysis tools
-- **⚡ Batch Processing**: Process multiple trace files in one command
-
-### Requirements
-
-- **Python 3.7+** (uses standard library only)
-- **rsvg-convert** (optional, for PNG generation)
-  - macOS: `brew install librsvg`  
-  - Ubuntu: `sudo apt-get install librsvg2-bin`
 
 ### Output Structure
 ```
