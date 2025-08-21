@@ -3,47 +3,23 @@ EXTENDS Naturals, FiniteSets, Sequences, TLC
 
 (**************************************************************************************************)
 (*                                                                                                *)
-(* This is a specification of snapshot isolation.  It is based on various sources, integrating    *)
-(* ideas and definitions from:                                                                    *)
+(* This is a specification for Snapshot Isolation. It is based on ongoing work by Will Schultz    *)
+(* and Sai Achalla on the topic of re-defining snapshot isolation in terms of re-execution.       *)
+(* This spec refers to the following papers for definitions and implementation ideas:             *)
 (*                                                                                                *)
-(*     ``Making Snapshot Isolation Serializable", Fekete et al., 2005                             *)
-(*     https://www.cse.iitb.ac.in/infolab/Data/Courses/CS632/2009/Papers/p492-fekete.pdf          *)
+(* "Serializable Snapshot Isolation" - https://arxiv.org/pdf/1208.4179                            *)
 (*                                                                                                *)
-(*     ``Serializable Isolation for Snapshot Databases", Cahill, 2009                             *)
-(*     https://ses.library.usyd.edu.au/bitstream/2123/5353/1/michael-cahill-2009-thesis.pdf       *)
+(* "Analyzing Snapshot Isolation" - https://software.imdea.org/~gotsman/papers/si-podc16.pdf      *)
 (*                                                                                                *)
-(*     ``A Read-Only Transaction Anomaly Under Snapshot Isolation", Fekete et al.                 *)
-(*     https://www.cs.umb.edu/~poneil/ROAnom.pdf                                                  *)
+(* "Transaction Healing - Scaling Optimistic Concurrency Control on multicores" -                 *)
+(* https://yingjunwu.github.io/papers/sigmod2016.pdf                                              *)
 (*                                                                                                *)
-(*     ``Debugging Designs", Chris Newcombe, 2011                                                 *)
-(*     https://github.com/pron/amazon-snapshot-spec/blob/master/DebuggingDesigns.pdf              *)
+(* "Morty: Scaling Concurrency Control with Re-execution" -                                       *)
+(* https://www.cs.cornell.edu/~matthelb/papers/morty-eurosys23.pdf                                *)
 (*                                                                                                *)
-(* This spec tries to model things at a very high level of abstraction, so as to communicate the  *)
-(* important concepts of snapshot isolation, as opposed to how a system might actually implement  *)
-(* it.  Correctness properties and their detailed explanations are included at the end of this    *)
-(* spec.  We draw the basic definition of snapshot isolation from Definition 1.1 of Fekete's      *)
-(* "Read-Only" anomaly paper:                                                                     *)
-(*                                                                                                *)
-(*                                                                                                *)
-(*     "...we assume time is measured by a counter that advances whenever any                     *)
-(* transaction starts or commits, and we designate the time when transaction Ti starts as         *)
-(* start(Ti) and the time when Ti commits as commit(Ti).                                          *)
-(*                                                                                                *)
-(* Definition 1.1: Snapshot Isolation (SI).  A transaction Ti executing under SI conceptually     *)
-(* reads data from the committed state of the database as of time start(Ti) (the snapshot), and   *)
-(* holds the results of its own writes in local memory store, so if it reads data it has written  *)
-(* it will read its own output.  Predicates evaluated by Ti are also based on rows and index      *)
-(* entry versions from the committed state of the database at time start(Ti), adjusted to take    *)
-(* Ti's own writes into account.  Snapshot Isolation also must obey a "First Committer (Updater)  *)
-(* Wins" rule...The interval in time from the start to the commit of a transaction, represented   *)
-(* [Start(Ti), Commit(Ti)], is called its transactional lifetime.  We say two transactions T1 and *)
-(* T2 are concurrent if their transactional lifetimes overlap, i.e., [start(T1), commit(T1)] ∩    *)
-(* [start(T2), commit(T2)] ≠ Φ.  Writes by transactions active after Ti starts, i.e., writes by   *)
-(* concurrent transactions, are not visible to Ti.  When Ti is ready to commit, it obeys the      *)
-(* First Committer Wins rule, as follows: Ti will successfully commit if and only if no           *)
-(* concurrent transaction Tk has already committed writes (updates) of rows or index entries that *)
-(* Ti intends to write."                                                                          *)
-(*                                                                                                *)
+(* The idea behind a re-execution based approach to Snapshot Isolation is so that we can avoid    *)
+(* aborting transactions and instead only re-execute parts of them by re-doing reads that are     *)
+(* found to be stale at commit time.                                                              *)
 (**************************************************************************************************)
 
 
@@ -228,12 +204,22 @@ StartTxn(newTxnId) ==
     /\ UNCHANGED <<dataStore, incomingEdges, outgoingEdges>>
                                                   
 (**************************************************************************************************)
-(* When a transaction T0 is ready to commit, it obeys the "First Committer Wins" rule.  T0 will   *)
-(* only successfully commit if no concurrent transaction has already committed writes of data     *)
-(* objects that T0 intends to write.  Transactions T0, T1 are considered concurrent if the        *)
-(* intersection of their timespans is non empty i.e.                                              *)
+(* When a transaction T0 is ready to commit, we check for the presence of "dangerous edge"        *)
+(* sequences in the serialization graph. This follows our definition of snapshot isolation as the *)
+(* exclusion of G-nonadjacent cycles (https://jepsen.io/consistency/phenomena/g-nonadjacent).     *)
+(* This term refers to cycles in the serialization graph that have atleast one RW edge between    *)
+(* transactions and where no two RW edges are adjacent to each other. The algorithm is as follows:*)
 (*                                                                                                *)
-(*     [start(T0), commit(T0)] \cap [start(T1), commit(T1)] != {}                                 *)
+(* We first divide the check into two parts:                                                      *)
+(* (1) We check T0's incoming edge sets and then run the detection algorithm                      *)
+(* (2) We check T0's outgoing edge sets and then run the detection algorithm                      *)
+(*                                                                                                *)
+(* In each part, we check if the RW edge has any adjacent RW edges. If not, then this function    *)
+(* returns False indicating that T0 cannot commit. However, if we find at least one adjacent RW   *)
+(* edge, then this function returns True, indicating that T0 can commit.                          *)
+(*                                                                                                *)
+(* When a transaction tries to commit, we perform RW and WW edge detection and update the         *)
+(* incoming and outgoing edge sets accordingly.                                                   *)
 (**************************************************************************************************)
 
 
@@ -252,15 +238,15 @@ TxnCanCommit(txnId, incoming, outgoing) ==
     \/ ~(\E <<outTxnId, edgeType>> \in outgoing[txnId] : edgeType = "RW")  \* If no RW edges in outgoing, return True
     \/ \E <<outTxnId, edgeType>> \in outgoing[txnId] : 
         /\ edgeType = "RW"
-        \/ (/\ incoming[outTxnId] /= {} 
-            /\ \E <<src, et>> \in incoming[outTxnId] : et = "RW")
-        \/ (/\ outgoing[txnId] /= {} 
-            /\ \E <<dst, et>> \in outgoing[txnId] : et = "RW")
+        /\ (\/ (/\ incoming[outTxnId] /= {} 
+               /\ \E <<src, et>> \in incoming[outTxnId] : et = "RW")
+            \/ (/\ outgoing[outTxnId] /= {} 
+               /\ \E <<dst, et>> \in outgoing[outTxnId] : et = "RW"))
     
         
 CommitTxn(txnId) == 
-    \* Transaction must be able to commit i.e. have no write conflicts with concurrent.
-    \* committed transactions.
+    \* Transaction must be able to commit i.e. have no "dangerous edge" sequences
+    \* in the serialization graph.
     /\ txnId \in RunningTxnIds
     \* Must not be a no-op transaction.
     /\ (WritesByTxn(txnHistory, txnId) \cup ReadsByTxn(txnHistory, txnId)) /= {}  
@@ -318,7 +304,7 @@ CommitTxn(txnId) ==
        /\ concurrentTxns' = updatedConcurrentTxns
 
     \* Check if the transaction can commit.
-    \* All data structures need to be updated incase the transaction aborts so that the information is preserved.
+    \* All data structures need to be updated before this checkincase the transaction aborts so that the information is preserved.
 
     /\ TxnCanCommit(txnId, incomingEdges', outgoingEdges')
 
@@ -341,10 +327,11 @@ CommitTxn(txnId) ==
     /\ UNCHANGED <<txnSnapshots>>
 
 (**************************************************************************************************)
-(* In this spec, a transaction aborts if and only if it cannot commit, due to write conflicts.    *)
+(* In this spec, a transaction aborts if and only if it cannot commit, due to dangerous edge      *)
+(* sequences in the serialization graph.                                                          *)
 (**************************************************************************************************)
 AbortTxn(txnId) ==
-    \* If a transaction can't commit due to write conflicts, then it
+    \* If a transaction can't commit due to dangerous edge sequences, then it
     \* must abort.
     /\ txnId \in RunningTxnIds
     \* Must not be a no-op transaction.
@@ -429,10 +416,6 @@ TxnUpdate(txnId, k, v) ==
 (* in the algorithm, we want to explicitly define what a "valid" termination state is.  If all    *)
 (* transactions have run and either committed or aborted, we consider that valid termination, and *)
 (* is allowed as an infinite suttering step.                                                      *)
-(*                                                                                                *)
-(* Also, once a transaction knows that it cannot commit due to write conflicts, we don't let it   *)
-(* do any more reads or writes, so as to eliminate wasted operations.  That is, once we know a    *)
-(* transaction can't commit, we force its next action to be abort.                                *)
 (**************************************************************************************************)           
 
 AllTxnsFinished == AbortedTxns(txnHistory) \cup CommittedTxns(txnHistory) = txnIds
@@ -899,6 +882,7 @@ G6NodeCycleTest == <<
 (**************************************************************************************************)
 
 \* Returns the serialization graph with edge types.
+\* Output format: <<t1, t2, edgeType>>
 SerializationGraphWithEdgeTypes(history) == 
     LET committedTxnIds == CommittedTxns(history) IN
     {<<t1, t2, edgeType>> \in (committedTxnIds \X committedTxnIds \X {"WW", "WR", "RW"}):
@@ -919,10 +903,10 @@ SerializationGraphWithCC(history) ==
         /\ cclabel = IF AreConcurrent(history, t1, t2) THEN "concurrent" ELSE "not_concurrent"}
 
 
-\* 2 node cycle with one RW edge and one WW edge using tracked edges
+\* Write Skew Anomaly
 WriteSkewAnomaly == 
     ~(
-      /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) <= 2
+      /\ Cardinality(SerializationGraphWithEdgeTypes(txnHistory)) = 2
       /\ Cardinality(FindAllNodesInAnyCycle(SerializationGraph(txnHistory))) = 2
       /\ \E a,b \in FindAllNodesInAnyCycle(SerializationGraph(txnHistory)) :
         /\ Cardinality({a,b}) = 2
@@ -955,13 +939,6 @@ Alias == [
 
 
 
-
-
-
-
-
-
-
 -------------------------------------------------
 
 \* Some model checking details.
@@ -984,10 +961,7 @@ Merge(r1, r2) ==
 SVGElem(_name, _attrs, _children, _innerText) == [name |-> _name, attrs |-> _attrs, children |-> _children, innerText |-> _innerText ]
 
 Text(x, y, text, attrs) == 
-    (**************************************************************************)
-    (* Text element.'x' and 'y' should be given as integers, and 'text' given *)
-    (* as a string.                                                           *)
-    (**************************************************************************)
+    \* Text element.'x' and 'y' should be given as integers, and 'text' given as a string.
     LET svgAttrs == [x |-> x, 
                      y |-> y] IN
     SVGElem("text", Merge(svgAttrs, attrs), <<>>, text) 

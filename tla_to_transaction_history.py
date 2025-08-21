@@ -459,14 +459,13 @@ def process_single_file(input_file: str, output_base: str, svg_base: str = None)
     
     Args:
         input_file: Path to the input file
-        output_base: Base name for output files (without extension)
+        output_base: Base name for output files (not used, kept for compatibility)
+        svg_base: Base name for SVG file
         
     Returns:
         True if successful, False otherwise
     """
-    output_file = f"{output_base}.txt"
     svg_file = f"{svg_base}.svg" if svg_base else f"{output_base}.svg"
-    png_file = f"{output_base}.png"
     
     # Extract ccgraph transactions (only for JSON files)
     ccgraph_txns = None
@@ -505,11 +504,8 @@ def process_single_file(input_file: str, output_base: str, svg_base: str = None)
         
         # Ensure directories exist
         svg_dir = os.path.dirname(svg_file)
-        png_dir = os.path.dirname(png_file)
         if svg_dir:
             os.makedirs(svg_dir, exist_ok=True)
-        if png_dir:
-            os.makedirs(png_dir, exist_ok=True)
         
         # Write SVG file
         with open(svg_file, 'w') as f:
@@ -539,7 +535,6 @@ def process_all_traces():
     
     # Create output directories
     os.makedirs("output/visualizations", exist_ok=True)
-    os.makedirs("output/images", exist_ok=True)
     
     success_count = 0
     
@@ -556,21 +551,18 @@ def process_all_traces():
         print(f"{'='*60}\n")
         
         # Generate output paths using anomaly name without "trace-" prefix
-        output_base = f"output/dbdiag_outputs/{anomaly_name}"
         svg_base = f"output/visualizations/{anomaly_name}"
-        png_base = f"output/images/{anomaly_name}"
         
-        # Process the file
-        if process_single_file(trace_file, output_base, svg_base):
+        # Process the file (using svg_base for both output_base and svg_base since we only generate SVG)
+        if process_single_file(trace_file, svg_base, svg_base):
             success_count += 1
         
     print(f"\n{'='*60}")
     print(f"Batch processing complete!")
     print(f"Successfully processed {success_count}/{len(trace_files)} trace files")
-    print(f"\nOutput locations:")
+    print(f"\nOutput location:")
     print(f"  - SVG visualizations: output/visualizations/")
-    print(f"  - PNG images: output/images/ (disabled)")
-    print(f"  - dbdiag format files: generated in memory only")
+    print(f"  Note: dbdiag format data is generated in memory only")
     print(f"{'='*60}")
     
     return success_count == len(trace_files)
@@ -590,8 +582,7 @@ def main():
         print()
         print("Output:")
         print("  output/visualizations/<trace_name>.svg - SVG visualizations")
-        print("  output/images/<trace_name>.png - PNG images (disabled)")
-        print("  Note: dbdiag format files are generated in memory only")
+        print("  Note: dbdiag format data is generated in memory only")
         print()
         print("Supported input formats:")
         print("  - JSON trace files (.json files) - preferred")
@@ -625,9 +616,8 @@ def main():
                 anomaly_name = trace_name[6:]
             else:
                 anomaly_name = trace_name
-            output_base = f"output/dbdiag_outputs/{anomaly_name}"
             svg_base = f"output/visualizations/{anomaly_name}"
-            success = process_single_file(input_file, output_base, svg_base)
+            success = process_single_file(input_file, svg_base, svg_base)
     else:
         print("Usage: python tla_to_transaction_history.py [trace_file | all]")
         print("Use --help for more information.")
