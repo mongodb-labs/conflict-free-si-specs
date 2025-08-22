@@ -41,7 +41,7 @@ cd bash_scripts
 chmod +x write-skew.sh
 ./write-skew.sh
 ```
-This should generate the serialization graph in the output/graphs/ directory and the causal order of operations in the output/visualizations/ directory.
+This should generate the serialization graph in the `output/graphs/directory` and the causal order of operations in the `output/visualizations/directory`.
 
 ---
 
