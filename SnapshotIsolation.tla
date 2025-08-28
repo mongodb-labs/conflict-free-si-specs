@@ -223,6 +223,17 @@ StartTxn(newTxnId) ==
 (**************************************************************************************************)
 
 
+\* Checks whether a given transaction is allowed to commit, based on whether it conflicts
+\* with other concurrent transactions that have already committed.
+TxnCanCommitWWConflict(txnId) ==
+    \E txn \in runningTxns : 
+        /\ txn.id = txnId
+        /\ ~\E op \in Range(txnHistory) :
+            /\ op.type = "commit" 
+            \* Did another transaction start after me.
+            /\ txn.id = txnId /\ op.time > txn.startTime 
+            /\ KeysWrittenByTxn(txnHistory, txnId) \cap op.updatedKeys /= {} \* Must be no conflicting keys.
+
 \* Checks whether a given transaction is allowed to commit based on RW edge cycle prevention
 TxnCanCommit(txnId, incoming, outgoing) ==
     \/ incoming[txnId] = {}  \* If incoming edge set is empty, return True
@@ -306,7 +317,8 @@ CommitTxn(txnId) ==
     \* Check if the transaction can commit.
     \* All data structures need to be updated before this checkincase the transaction aborts so that the information is preserved.
 
-    /\ TxnCanCommit(txnId, incomingEdges', outgoingEdges')
+    \* /\ TxnCanCommit(txnId, incomingEdges', outgoingEdges')
+    /\ TxnCanCommitWWConflict(txnId)
 
     \* We can leave the snapshot around, since it won't be used again.
     /\ LET commitOp == [ type          |-> "commit", 
@@ -569,13 +581,17 @@ IsConflictSerializable(h) == ~IsCycle(SerializationGraph(h))
 
 BSeq(S, b) == {<<>>} \cup UNION {[1..n -> S] : n \in 1..b}
 
-Path(V, E) == {p \in BSeq(V, Cardinality(V)) :
+\* Record path as a sequence of edges.
+Path(V, E) == {p \in BSeq(E, Cardinality(V)) :
              /\ p # << >>
-             /\ \A i \in 1..(Len(p)-1) :( \E e \in E : <<e[1],e[2]>> = <<p[i], p[i+1]>>)}
+             /\ \A i \in 1..(Len(p)-1) : p[i][2] = p[i+1][1]}
 
 Cycles(V, E) == 
-    LET cyclePaths == {p \in Path(V, E) : Len(p) > 1 /\ p[1] = p[Len(p)]} IN
-    {{<<cpath[i],cpath[i+1]>> : i \in 1..(Len(cpath)-1)} : cpath \in cyclePaths}
+    LET cyclePaths == {p \in Path(V, E) : Len(p) > 1 /\ p[1][1] = p[Len(p)][2]} IN
+    {Range(p) : p \in cyclePaths}
+        
+    \* LET cyclePaths == {p \in Path(V, E) : Len(p) > 1 /\ p[1][1] = p[Len(p)][2]} IN
+    \* {{<<cpath[i],cpath[i+1]>> : i \in 1..(Len(cpath)-1)} : cpath \in cyclePaths}
 
 AllCycles == Cycles(txnIds, SerializationGraphWithEdgeTypes(txnHistory))
 
