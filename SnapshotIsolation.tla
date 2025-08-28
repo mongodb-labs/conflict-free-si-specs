@@ -551,7 +551,13 @@ RWDependency(h, t1Id, t2Id) ==
     \E op2 \in WritesByTxn(h, t2Id) :
         /\ op1.key = op2.key
         /\ BeginOp(h, t1Id).time < CommitOp(h, t2Id).time  \* T1 starts before T2 commits. This means that T1 read
-        
+        \* For simplicity, we also only consider anti-dependencies to occur between
+        \* concurrent transactions. If I read a key and then some time later, a
+        \* non-concurrent transaction writes to that key, we don't worry about such a RW edge, since the later 
+        \* transaction won't be installing the "immediate successor" of that key's version.
+        \* This is formally discussed in Remark 2.1 of "Making Snapshot Isolation Serializable" 
+        \* (https://dsf.berkeley.edu/cs286/papers/ssi-tods2005.pdf)
+        /\ BeginOp(h, t2Id).time < CommitOp(h, t1Id).time
 
 \* Produces the serialization graph as defined above, for a given history. This graph is produced 
 \* by defining the appropriate set comprehension, where the produced set contains all the edges of the graph.
