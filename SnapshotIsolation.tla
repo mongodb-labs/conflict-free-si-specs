@@ -551,8 +551,52 @@ SerializationGraph(history) ==
            \/ WRDependency(history, tedge[1], tedge[2])
            \/ RWDependency(history, tedge[1], tedge[2])}
 
+        \* Returns the serialization graph with edge types.
+\* Output format: <<t1, t2, edgeType>>
+SerializationGraphWithEdgeTypes(history) == 
+    LET committedTxnIds == CommittedTxns(history) IN
+    {<<t1, t2, edgeType>> \in (committedTxnIds \X committedTxnIds \X {"WW", "WR", "RW"}):
+        /\ t1 /= t2
+        /\ \/ (edgeType = "WW" /\ WWDependency(history, t1, t2))
+           \/ (edgeType = "WR" /\ WRDependency(history, t1, t2))
+           \/ (edgeType = "RW" /\ RWDependency(history, t1, t2))}
+
+
+
 \* The key property to verify i.e. serializability of transaction histories.
 IsConflictSerializable(h) == ~IsCycle(SerializationGraph(h))
+
+
+BSeq(S, b) == {<<>>} \cup UNION {[1..n -> S] : n \in 1..b}
+
+Path(V, E) == {p \in BSeq(V, Cardinality(V)) :
+             /\ p # << >>
+             /\ \A i \in 1..(Len(p)-1) :( \E e \in E : <<e[1],e[2]>> = <<p[i], p[i+1]>>)}
+
+Cycles(V, E) == 
+    LET cyclePaths == {p \in Path(V, E) : Len(p) > 1 /\ p[1] = p[Len(p)]} IN
+    {{<<cpath[i],cpath[i+1]>> : i \in 1..(Len(cpath)-1)} : cpath \in cyclePaths}
+
+AllCycles == Cycles(txnIds, SerializationGraphWithEdgeTypes(txnHistory))
+
+\* Given a set of edges which form a cycle, check whether this is a G-nonadjacent cycle.
+IsGnonadjacentCycle(cycleEdges) == 
+    \A e1,e2 \in cycleEdges : 
+        \* Adjacent edges cannot both be RW.
+        (e1[2] = e2[1]) => ~(e1[3] = "RW" /\ e2[3] = "RW")
+
+
+NoGnonadjacent == \A c \in AllCycles : ~IsGnonadjacentCycle(c)
+
+Test == 
+\*     /\ TRUE
+\*     \* /\ PrintT(AllCycleNodes)
+\*     \* /\ PrintT(Path(txnIds, SerializationGraph(txnHistory)))
+    /\ PrintT(AllCycles)
+\*     /\ PrintT({IsGnonadjacentCycle(c) : c \in Cycles(txnIds, SerializationGraph(txnHistory))})
+
+
+
 
 \* Examples of each dependency type.
 HistWW == << [type |-> "begin"  , txnId |-> 0 , time |-> 0],
@@ -880,16 +924,6 @@ G6NodeCycleTest == <<
 (* one RW edge. This is a specific type of non-serializable schedule that can occur under         *)
 (* snapshot isolation.                                                                            *)
 (**************************************************************************************************)
-
-\* Returns the serialization graph with edge types.
-\* Output format: <<t1, t2, edgeType>>
-SerializationGraphWithEdgeTypes(history) == 
-    LET committedTxnIds == CommittedTxns(history) IN
-    {<<t1, t2, edgeType>> \in (committedTxnIds \X committedTxnIds \X {"WW", "WR", "RW"}):
-        /\ t1 /= t2
-        /\ \/ (edgeType = "WW" /\ WWDependency(history, t1, t2))
-           \/ (edgeType = "WR" /\ WRDependency(history, t1, t2))
-           \/ (edgeType = "RW" /\ RWDependency(history, t1, t2))}
 
 \* Returns the serialization graph with edge types and concurrency information.
 \* Output format: <<t1, t2, edgeType, concurrent_or_not>>
