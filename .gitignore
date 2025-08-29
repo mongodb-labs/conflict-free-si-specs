@@ -24,3 +24,8 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+output/
+logout
+traces/trace.json
+ccgraph.png
