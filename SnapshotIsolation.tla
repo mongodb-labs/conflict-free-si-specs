@@ -1097,8 +1097,9 @@ nodeAttrsFn(n) == [
 
 edgeAttrsFn(e) == [
     label |-> e[3],
-    color |-> "black",
-    fontsize |-> "8"
+    color |-> IF e[5] = "hazardous" THEN "orange" ELSE "black",
+    fontsize |-> "8",
+    style |-> IF e[4] = "concurrent" THEN "dashed" ELSE "solid"
 ]
 
 txnGraph == SerializationGraph(txnHistory)
@@ -1112,8 +1113,8 @@ txnGraphWithEdgeTypes ==
         /\ \/ (e[2] = "WW" /\ WWDependency(txnHistory, e[1][1], e[1][2]))
            \/ (e[2] = "WR" /\ WRDependency(txnHistory, e[1][1], e[1][2]))
            \/ (e[2] = "RW" /\ RWDependency(txnHistory, e[1][1], e[1][2]))}
-txnGraphEdges == {<<e[1][1], e[1][2], e[2]>> : e \in txnGraphWithEdgeTypes}
-AnimView == Group(<<DiGraph(txnIds,txnGraphEdges,[n \in txnIds |-> nodeAttrsFn(n)], [e \in txnGraphEdges |-> edgeAttrsFn(e)])>>, [transform |-> "translate(40, 40) scale(1.25)"])
+txnGraphEdges == {<<e[1][1], e[1][2], e[2], IF AreConcurrent(txnHistory, e[1][1], e[1][2]) THEN "concurrent" ELSE "not_concurrent", IF HazardousRWEdge(<<e[1][1], e[1][2], "RW">>) THEN "hazardous" ELSE "benign">> : e \in txnGraphWithEdgeTypes}
+AnimView == Group(<<DiGraph(txnIds,txnGraphEdges,[n \in txnIds |-> nodeAttrsFn(n)], [e \in txnGraphEdges |-> edgeAttrsFn(e)])>>, [transform |-> "translate(40, 40) scale(1.5)"])
 
 =============================================================================
 \* Modification History
