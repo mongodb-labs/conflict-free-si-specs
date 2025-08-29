@@ -18,10 +18,12 @@ def visualize_sergraph(trace_file, output_name="ccgraph"):
     # Get the last state from trace
     last_state = trace[-1][1]
     print(last_state)
-    
     # Create a new directed graph
     dot = graphviz.Digraph(comment='Serialization Graph')
     dot.attr(rankdir='LR')
+    
+    # Set higher DPI for better resolution
+    dot.attr(dpi='300')
     
     # Extract sergraph edges from the last state
     ccgraph = last_state['ccgraph']
@@ -37,23 +39,33 @@ def visualize_sergraph(trace_file, output_name="ccgraph"):
             # Full format: <<src, target, etype, cclabel>>
             etype = edge[2]
             cclabel = edge[3]
+            rwlabel = edge[4]
             if cclabel == "concurrent":
-                label = etype + "(C)"
+                style = "dashed"
             else:
-                label = etype + "(NC)"
+                style = "solid"
+            label = etype
+            color = "orange" if rwlabel == "hazardous" else "black"
         elif len(edge) >= 3:
             # Edge with type: <<src, target, etype>>
             etype = edge[2]
             label = etype
+            style = "solid"
+            color = "black"
         else:
             # Basic edge: <<src, target>>
             label = ""
+            style = "solid"
+            color = "black"
         
-        dot.node(src)
-        dot.node(target)
-        dot.edge(src, target, label=label)
+        # Add nodes with larger size and fonts
+        dot.node(src, fontsize='14', width='0.5', height='0.5')
+        dot.node(target, fontsize='14', width='0.5', height='0.5')
+        
+        # Add edge with larger font
+        dot.edge(src, target, label=label, style=style, color=color, fontsize='12', penwidth='2.0')
     
-    # Save the graph (only PNG, no DOT file)
+    # Save the graph in high resolution (only PNG, no DOT file)
     dot.render(output_name, format='png', cleanup=True)
 
 if __name__ == '__main__':
