@@ -607,8 +607,31 @@ IsGnonadjacentCycle(cycleEdges) ==
         \* Adjacent edges cannot both be RW.
         (e1[2] = e2[1]) => ~(e1[3] = "RW" /\ e2[3] = "RW")
 
+\* 
+\* We define a RW edge <<t1,t2>> as "hazardous" if the commit order between t1
+\* and t2 is opposite the direction of the RW edge. 
+\* 
+\* We refer to the inverse case as a "benign" RW edge.
+\* 
+HazardousRWEdge(e) == e[3] = "RW" /\ CommitOp(txnHistory, e[1]).time > CommitOp(txnHistory, e[2]).time
+BenignRWEdge(e) == e[3] = "RW" /\ CommitOp(txnHistory, e[1]).time < CommitOp(txnHistory, e[2]).time
 
+\* States that no G-nonadjacent cycles are possible.
 NoGnonadjacent == \A c \in AllCycles : ~IsGnonadjacentCycle(c)
+
+\* States that all G-nonadjacent cycles contain at least one "hazardous" RW edge.
+AllGnonadjacentContainHazardousRWEdge == 
+    \A c \in AllCycles : IsGnonadjacentCycle(c) => (\E e \in c : HazardousRWEdge(e))
+
+
+
+
+LargerGnonadjacentWitness == \A c \in AllCycles : ~(
+    /\ IsGnonadjacentCycle(c) 
+    /\ Cardinality(c) = 3 
+    /\ Cardinality({e[1] : e \in c }) = 3 
+    /\ Cardinality(AllCycles) = 1
+)
 
 Test == 
 \*     /\ TRUE
@@ -951,12 +974,13 @@ G6NodeCycleTest == <<
 \* Output format: <<t1, t2, edgeType, concurrent_or_not>>
 SerializationGraphWithCC(history) == 
     LET committedTxnIds == CommittedTxns(history) IN
-    {<<t1, t2, edgeType, cclabel>> \in (committedTxnIds \X committedTxnIds \X {"WW", "WR", "RW"} \X {"concurrent", "not_concurrent"}):
+    {<<t1, t2, edgeType, cclabel, rwlabel>> \in (committedTxnIds \X committedTxnIds \X {"WW", "WR", "RW"} \X {"concurrent", "not_concurrent"} \X {"benign", "hazardous"}):
         /\ t1 /= t2
         /\ \/ (edgeType = "WW" /\ WWDependency(history, t1, t2))
            \/ (edgeType = "WR" /\ WRDependency(history, t1, t2))
            \/ (edgeType = "RW" /\ RWDependency(history, t1, t2))
-        /\ cclabel = IF AreConcurrent(history, t1, t2) THEN "concurrent" ELSE "not_concurrent"}
+        /\ cclabel = IF AreConcurrent(history, t1, t2) THEN "concurrent" ELSE "not_concurrent"
+        /\ rwlabel = IF HazardousRWEdge(<<t1, t2, "RW">>) THEN "hazardous" ELSE "benign"}
 
 
 \* Write Skew Anomaly
