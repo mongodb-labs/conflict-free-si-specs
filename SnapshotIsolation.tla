@@ -619,6 +619,20 @@ BenignRWEdge(e) == e[3] = "RW" /\ CommitOp(txnHistory, e[1]).time < CommitOp(txn
 \* States that no G-nonadjacent cycles are possible.
 NoGnonadjacent == \A c \in AllCycles : ~IsGnonadjacentCycle(c)
 
+\* 
+\* Seems like we may actually want to state a slightly more accurate property which is something like,
+\* check that there are no cases where we have *only* G-nonadjacent cycles i.e. where those cycles
+\* are not also accompanied by some G-adjacent cycles (e.g. general G2 cycles). If we have an appearance
+\* of a G-nonjadjacent cycle only when also in presence of a G-adjacent cycle, then we may actually
+\* consider that to be acceptable.
+\* 
+\* e.g. this accounts for cases when we have something like both a WW and RW edge between two transactions,
+\* in a way that could form both a G-adjacent and G-nonadjacent cycle.
+\* 
+NoGnonadjacentGeneral == 
+    (\E c \in AllCycles : IsGnonadjacentCycle(c)) => 
+        \E c2 \in AllCycles : ~IsGnonadjacentCycle(c2)
+
 \* States that all G-nonadjacent cycles contain at least one "hazardous" RW edge.
 AllGnonadjacentContainHazardousRWEdge == 
     \A c \in AllCycles : IsGnonadjacentCycle(c) => (\E e \in c : HazardousRWEdge(e))
