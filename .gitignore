@@ -13,6 +13,7 @@ __pycache__/
 
 # OS files
 .DS_Store
+*.DS_Store
 Thumbs.db
 
 # IDE files
@@ -29,4 +30,4 @@ output/
 logout
 traces/trace.json
 ccgraph.png
-ccgraph
+ccgraph.DS_Store
