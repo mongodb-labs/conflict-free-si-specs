@@ -44,6 +44,16 @@ Image(x, y, width, height, href, attrs) ==
                      "height"    :> height) IN
     SVGElem("image", Merge(svgAttrs, attrs), <<>>, "")
 
+Line(x1, y1, x2, y2, attrs) == 
+    (**************************************************************************)
+    (* Line element.  'x1', 'y1', 'x2', and 'y2' should be given as integers. *)
+    (**************************************************************************)
+    LET svgAttrs == [x1 |-> x1, 
+                     y1 |-> y1, 
+                     x2 |-> x2,
+                     y2 |-> y2] IN
+    SVGElem("line", Merge(svgAttrs, attrs), <<>>, "")
+
 \* Group element. 'children' is as a sequence of elements that will be contained in this group.
 Group(children, attrs) == SVGElem("g", attrs, children, "")
 
@@ -89,7 +99,61 @@ txnGraphWithEdgeTypes ==
            \/ (e[2] = "WR" /\ WRDependency(txnHistory, e[1][1], e[1][2]))
            \/ (e[2] = "RW" /\ RWDependency(txnHistory, e[1][1], e[1][2]))}
 txnGraphEdges == {<<e[1][1], e[1][2], e[2], IF AreConcurrent(txnHistory, e[1][1], e[1][2]) THEN "concurrent" ELSE "not_concurrent", IF HazardousRWEdge(<<e[1][1], e[1][2], "RW">>) THEN "hazardous" ELSE "benign">> : e \in txnGraphWithEdgeTypes}
-AnimView == Group(<<DiGraph(txnIds,txnGraphEdges,[n \in txnIds |-> nodeAttrsFn(n)], [e \in txnGraphEdges |-> edgeAttrsFn(e)])>>, [transform |-> "translate(40, 40) scale(1.5)"])
+
+SerGraphElem == Group(<<DiGraph(txnIds,txnGraphEdges,[n \in txnIds |-> nodeAttrsFn(n)], [e \in txnGraphEdges |-> edgeAttrsFn(e)])>>, [transform |-> "translate(10, 140) scale(0.6)"])
+
+IndexOf(seq, elem) == CHOOSE i \in DOMAIN seq : seq[i] = elem
+
+\* Create a fixed mapping from transaction IDs to y positions
+yPos(tid) == IndexOf(SetToSeq(txnIds), tid) - 1
+
+
+TimelineElem(txnId) ==
+    LET txnEvents == SelectSeq(txnHistory, LAMBDA op: op.txnId = txnId)
+        eventToElem(event, idx) ==
+            LET x == idx * 45
+                y == yPos(txnId) * 40 + 10 \* Use the mapped y position
+                color == CASE event.type = "begin" -> "blue"
+                          [] event.type = "read" -> "gray" 
+                          [] event.type = "write" -> "orange"
+                          [] event.type = "commit" -> "green"
+                          [] OTHER -> "black"
+                label == CASE event.type = "begin" -> "B"
+                          [] event.type = "read" -> "r(" \o ToString(event.key) \o "," \o ToString(event.val) \o ")"
+                          [] event.type = "write" -> "w(" \o ToString(event.key) \o "," \o ToString(event.val) \o ")"
+                          [] event.type = "commit" -> "c"
+                          [] OTHER -> "?"
+            IN Group(<<
+                Circle(x, y, 4, ("fill" :> color @@ "z-index" :> "10")),
+                Text(x, y + 20, label, ("text-anchor" :> "middle" @@ "font-size" :> "8px"))
+            >>, <<>>)
+        events == [i \in DOMAIN txnEvents |-> eventToElem(txnEvents[i], IndexOf(txnHistory, txnEvents[i]))]
+        \* Find start and end x coordinates for timeline
+        startX == IndexOf(txnHistory, CHOOSE op \in Range(txnHistory): op.type = "begin" /\ op.txnId = txnId) * 45
+        endX == IF txnId \in CommittedTxns(txnHistory)
+                THEN IndexOf(txnHistory, CHOOSE op \in Range(txnHistory): op.type = "commit" /\ op.txnId = txnId) * 45
+                ELSE IndexOf(txnHistory, CHOOSE op \in Range(txnHistory): op.txnId = txnId) * 45
+        y == yPos(txnId) * 40 + 10
+    IN 
+    Group(
+        (IF (txnId \in CommittedTxns(txnHistory))
+    THEN <<Line(startX, y, endX, y, ("stroke" :> "gray" @@ "stroke-width" :> "1"))>>
+    ELSE <<>>) \o
+        <<
+        Text(0, y, ToString(txnId), ("text-anchor" :> "end" @@ "font-size" :> "10px")),
+        Group([i \in DOMAIN events |-> events[i]], <<>>)
+    >>
+    , <<>>)
+
+TimelinesElem == Group(SetToSeq({TimelineElem(txnId) : txnId \in txnIds}), [transform |-> "translate(10, 5) scale(0.7)"])
+
+AnimView == Group(<<
+    SerGraphElem
+    , 
+    TimelinesElem
+    >>, 
+    [transform |-> "translate(20, 20) scale(1.6)"]
+    ) 
 
 
 
