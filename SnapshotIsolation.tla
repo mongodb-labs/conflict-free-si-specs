@@ -128,11 +128,13 @@ Init ==
 \* Generic TLA+ helper.
 Range(f) == {f[x] : x \in DOMAIN f}
 
+
 \* The begin or commit op for a given transaction id.
 BeginOp(h, txnId)  == CHOOSE op \in Range(h) : op.txnId = txnId /\ op.type = "begin"
 CommitOp(h, txnId) == CHOOSE op \in Range(h) : op.txnId = txnId /\ op.type = "commit"
 
 \* The set of all committed/aborted transaction ids in a given history.
+StartedTxns(h) == {op.txnId : op \in {op \in Range(h) : op.type = "begin"}}
 CommittedTxns(h) == {op.txnId : op \in {op \in Range(h) : op.type = "commit"}}
 AbortedTxns(h)   == {op.txnId : op \in {op \in Range(h) : op.type = "abort"}}
 
