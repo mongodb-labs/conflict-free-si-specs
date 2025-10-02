@@ -223,6 +223,95 @@ StartTxn(newTxnId) ==
 (**************************************************************************************************)
 
 
+
+(**************************************************************************************************)
+(*                                                                                                *)
+(* Verifying Serializability                                                                      *)
+(*                                                                                                *)
+(* ---------------------------------------                                                        *)
+(*                                                                                                *)
+(* For checking serializability of transaction histories we use the "Conflict Serializability"    *)
+(* definition.  This is slightly different than what is known as "View Serializability", but is   *)
+(* suitable for verification, since it is efficient to check, whereas checking view               *)
+(* serializability of a transaction schedule is known to be NP-complete.                          *)
+(*                                                                                                *)
+(* The definition of conflict serializability permits a more limited set of transaction           *)
+(* histories.  Intuitively, it can be viewed as checking whether a given schedule has the         *)
+(* "potential" to produce a certain anomaly, even if the particular data values for a history     *)
+(* make it serializable.  Formally, we can think of the set of conflict serializable histories as *)
+(* a subset of all possible serializable histories.  Alternatively, we can say that, for a given  *)
+(* history H ConflictSerializable(H) => ViewSerializable(H).  The converse, however, is not true. *)
+(* A history may be view serializable but not conflict serializable.                              *)
+(*                                                                                                *)
+(* In order to check for conflict serializability, we construct a multi-version serialization     *)
+(* graph (MVSG).  Details on MVSG can be found, among other places, in Cahill's thesis, Section   *)
+(* 2.5.1.  To construct the MVSG, we put an edge from one committed transaction T1 to another     *)
+(* committed transaction T2 in the following situations:                                          *)
+(*                                                                                                *)
+(*   (WW-Dependency)                                                                              *)
+(*   T1 produces a version of x, and T2 produces a later version of x.                            *)
+(*                                                                                                *)
+(*   (WR-Dependency)                                                                              *)
+(*   T1 produces a version of x, and T2 reads this (or a later) version of x.                     *)
+(*                                                                                                *)
+(*   (RW-Dependency)                                                                              *)
+(*   T1 reads a version of x, and T2 produces a later version of x. This is                       *)
+(*   the only case where T1 and T2 can run concurrently.                                          *)
+(*                                                                                                *)
+(**************************************************************************************************)
+
+\* T1 wrote to a key that T2 then also wrote to. The First Committer Wins rule implies
+\* that T1 must have committed before T2 began.
+WWDependency(h, t1Id, t2Id) == 
+    \E op1 \in WritesByTxn(h, t1Id) :
+    \E op2 \in WritesByTxn(h, t2Id) :
+        /\ op1.key = op2.key
+        /\ CommitOp(h, t1Id).time < CommitOp(h, t2Id).time
+
+\* T1 wrote to a key that T2 then later read, after T1 committed.
+WRDependency(h, t1Id, t2Id) == 
+    \E op1 \in WritesByTxn(h, t1Id) :
+    \E op2 \in ReadsByTxn(h, t2Id) :
+        /\ op1.key = op2.key
+        /\ CommitOp(h, t1Id).time < BeginOp(h, t2Id).time   
+
+\* T1 read a key that T2 then later wrote to. T1 must start before T2 commits, since this implies that T1 read  
+\* a version of the key and T2 produced a later version of that ke, i.e. when it commits. T1, however, read 
+\* an earlier version of that key, because it started before T2 committed.
+RWDependency(h, t1Id, t2Id) == 
+    \E op1 \in ReadsByTxn(h, t1Id) :
+    \E op2 \in WritesByTxn(h, t2Id) :
+        /\ op1.key = op2.key
+        /\ BeginOp(h, t1Id).time < CommitOp(h, t2Id).time  \* T1 starts before T2 commits. This means that T1 read
+        \* For simplicity, we also only consider anti-dependencies to occur between
+        \* concurrent transactions. If I read a key and then some time later, a
+        \* non-concurrent transaction writes to that key, we don't worry about such a RW edge, since the later 
+        \* transaction won't be installing the "immediate successor" of that key's version.
+        \* This is formally discussed in Remark 2.1 of "Making Snapshot Isolation Serializable" 
+        \* (https://dsf.berkeley.edu/cs286/papers/ssi-tods2005.pdf)
+        /\ BeginOp(h, t2Id).time < CommitOp(h, t1Id).time
+
+\* Produces the serialization graph as defined above, for a given history. This graph is produced 
+\* by defining the appropriate set comprehension, where the produced set contains all the edges of the graph.
+SerializationGraph(history) == 
+    LET committedTxnIds == CommittedTxns(history) IN
+    {tedge \in (committedTxnIds \X committedTxnIds):
+        /\ tedge[1] /= tedge[2]
+        /\ \/ WWDependency(history, tedge[1], tedge[2])
+           \/ WRDependency(history, tedge[1], tedge[2])
+           \/ RWDependency(history, tedge[1], tedge[2])}
+
+\* Returns the serialization graph with edge types.
+\* Output format: <<t1, t2, edgeType>>
+SerializationGraphWithEdgeTypes(history) == 
+    LET committedTxnIds == CommittedTxns(history) IN
+    {<<t1, t2, edgeType>> \in (committedTxnIds \X committedTxnIds \X {"WW", "WR", "RW"}):
+        /\ t1 /= t2
+        /\ \/ (edgeType = "WW" /\ WWDependency(history, t1, t2))
+           \/ (edgeType = "WR" /\ WRDependency(history, t1, t2))
+           \/ (edgeType = "RW" /\ RWDependency(history, t1, t2))}
+
+
 \* Checks whether a given transaction is allowed to commit, based on whether it conflicts
 \* with other concurrent transactions that have already committed.
 TxnCanCommitWWConflict(txnId) ==
@@ -233,6 +322,61 @@ TxnCanCommitWWConflict(txnId) ==
             \* Did another transaction start after me.
             /\ txn.id = txnId /\ op.time > txn.startTime 
             /\ KeysWrittenByTxn(txnHistory, txnId) \cap op.updatedKeys /= {} \* Must be no conflicting keys.
+
+
+\* Load locally:
+\* http://127.0.0.1:8000/#!/home?specpath=%2Flocal_dir%2FSnapshotIsolation.tla&initPred=Init&nextPred=Next&constants%5BtxnIds%5D=%7Bt1%2Ct2%2Ct3%7D&constants%5Bkeys%5D=%7Bk1%2Ck2%7D&constants%5Bvalues%5D=%7Bv1%2Cv2%7D&constants%5BEmpty%5D=Empty
+
+\* 
+\* T1 -> T2 - RW - > T3 -> T4
+\* 
+\* Check A (T2 commits last)
+\* 
+\* Need to check if this transaction (would be T2) has an outgoing RW edge to T3 but no incoming RW edges,
+\* and that T3 has no outgoing RW edges.
+\* 
+
+IncomingEdgeTypes(incoming, txnId) == {edgeType \in {"WW", "WR", "RW"} : \E <<inTxnId, e>> \in incoming[txnId] : e = edgeType}
+
+
+\* Incoming edges for a transaction based on direct inspection of the global transaction history.
+IncomingEdgesGlobal(txnId, hist) == 
+    {<<t1, t2, edgeType>> \in SerializationGraphWithEdgeTypes(hist) : t2 = txnId}
+    
+OutgoingEdgesGlobal(txnId, hist) == 
+    {<<t1, t2, edgeType>> \in SerializationGraphWithEdgeTypes(hist) : t1 = txnId}
+
+TxnMustAbort(txnId, incoming, outgoing, hist) ==
+    \* If txnId has no incoming RW edges, and an outgoing hazardous RW edge, we must abort.
+    /\ \E <<t, outTxnId, edgeType>> \in OutgoingEdgesGlobal(txnId, hist) : 
+        /\ edgeType = "RW"
+        \* /\ CommitOp(txnHistory, txnId).time > CommitOp(txnHistory, outTxnId).time
+        \* Is hazardous RW edge.
+        /\ \E op \in Range(hist) : op.txnId = outTxnId /\ op.type = "commit"
+
+    \* Note that any edge between transactions can be a "multi-edge" i.e. there may be multiple
+    \* edges of different dependency types between two transactions. If this is the case, then
+    \* we must abort specifically if there exists an incoming edge that is strictly a non-RW edge.
+    \* For example, if we there is an incoming edge that is a multi-edge of {WW, RW}, then 
+    \* we can allow this, since any cycle formed via this edge will not be G-nonadjacent. If,
+    \* however, there exists some incoming edge that is strictly RW, and a different incoming edge
+    \* that is strictly non-RW, then we must abort.
+
+    \* (a) there exists an incoming edge that is strictly non-RW.
+    /\ \E <<inTxnId, t, edgeType>> \in IncomingEdgesGlobal(txnId, hist) : 
+        /\ edgeType \in {"WW", "WR"}
+        /\ \A <<ti,tj,etype>> \in IncomingEdgesGlobal(txnId, hist) : ti = inTxnId => etype \in {"WW", "WR"}
+
+
+
+    \* There is not a distinct incoming edge the is RW.
+    \* /\ ~\E <<inTxnId, edgeType>> \in incoming[txnId] : 
+        \* /\ edgeType = "RW"
+
+
+    \* /\ \E <<outTxnId, edgeType>> \in outgoing[txnId] : 
+        \* /\ edgeType = "RW"
+        \* /\ ~\E <<nextOutTxnId, nextEdgeType>> \in outgoing[outTxnId] : nextEdgeType = "RW"
 
 \* Checks whether a given transaction is allowed to commit based on RW edge cycle prevention
 TxnCanCommit(txnId, incoming, outgoing) ==
@@ -301,6 +445,8 @@ CommitTxn(txnId) ==
            \* Update outgoing edges for this transaction (combining RW and WW edges)
            finalOutgoing == [outgoingEdges EXCEPT ![txnId] = outgoingEdges[txnId] \cup newOutgoingRW \cup newOutgoingWW]
            \* Update incoming edges for the target transactions (combining RW and WW targets)
+           \* TODO: These updating of incoming edge types may need to be amended. For initial prototype, we can directly
+           \* check global transaction history for in/out dep edges.
            finalIncoming == [tid \in txnIds |->
                                 IF tid \in rwTargets
                                 THEN (IF tid \in wwTargets 
@@ -314,18 +460,21 @@ CommitTxn(txnId) ==
        /\ incomingEdges' = finalIncoming
        /\ concurrentTxns' = updatedConcurrentTxns
 
-    \* Check if the transaction can commit.
-    \* All data structures need to be updated before this checkincase the transaction aborts so that the information is preserved.
-
-    \* /\ TxnCanCommit(txnId, incomingEdges', outgoingEdges')
-    /\ TxnCanCommitWWConflict(txnId)
-
     \* We can leave the snapshot around, since it won't be used again.
     /\ LET commitOp == [ type          |-> "commit", 
                          txnId         |-> txnId, 
                          time          |-> clock + 1,
                          updatedKeys   |-> KeysWrittenByTxn(txnHistory, txnId)] IN
-       txnHistory' = Append(txnHistory, commitOp)            
+       txnHistory' = Append(txnHistory, commitOp)       
+
+    \* 
+    \* Check if the transaction can commit.
+    \*
+
+    \* /\ TxnCanCommit(txnId, incomingEdges', outgoingEdges')
+    \* /\ TxnCanCommitWWConflict(txnId)
+    /\ ~TxnMustAbort(txnId, incomingEdges', outgoingEdges', txnHistory')
+     
     \* Merge this transaction's updates into the data store. If the 
     \* transaction has updated a key, then we use its version as the new
     \* value for that key. Otherwise the key remains unchanged.
@@ -492,95 +641,6 @@ IsCycle(edges) == FindAllNodesInAnyCycle(edges) /= {}
 
 
 
-(**************************************************************************************************)
-(*                                                                                                *)
-(* Verifying Serializability                                                                      *)
-(*                                                                                                *)
-(* ---------------------------------------                                                        *)
-(*                                                                                                *)
-(* For checking serializability of transaction histories we use the "Conflict Serializability"    *)
-(* definition.  This is slightly different than what is known as "View Serializability", but is   *)
-(* suitable for verification, since it is efficient to check, whereas checking view               *)
-(* serializability of a transaction schedule is known to be NP-complete.                          *)
-(*                                                                                                *)
-(* The definition of conflict serializability permits a more limited set of transaction           *)
-(* histories.  Intuitively, it can be viewed as checking whether a given schedule has the         *)
-(* "potential" to produce a certain anomaly, even if the particular data values for a history     *)
-(* make it serializable.  Formally, we can think of the set of conflict serializable histories as *)
-(* a subset of all possible serializable histories.  Alternatively, we can say that, for a given  *)
-(* history H ConflictSerializable(H) => ViewSerializable(H).  The converse, however, is not true. *)
-(* A history may be view serializable but not conflict serializable.                              *)
-(*                                                                                                *)
-(* In order to check for conflict serializability, we construct a multi-version serialization     *)
-(* graph (MVSG).  Details on MVSG can be found, among other places, in Cahill's thesis, Section   *)
-(* 2.5.1.  To construct the MVSG, we put an edge from one committed transaction T1 to another     *)
-(* committed transaction T2 in the following situations:                                          *)
-(*                                                                                                *)
-(*   (WW-Dependency)                                                                              *)
-(*   T1 produces a version of x, and T2 produces a later version of x.                            *)
-(*                                                                                                *)
-(*   (WR-Dependency)                                                                              *)
-(*   T1 produces a version of x, and T2 reads this (or a later) version of x.                     *)
-(*                                                                                                *)
-(*   (RW-Dependency)                                                                              *)
-(*   T1 reads a version of x, and T2 produces a later version of x. This is                       *)
-(*   the only case where T1 and T2 can run concurrently.                                          *)
-(*                                                                                                *)
-(**************************************************************************************************)
-
-\* T1 wrote to a key that T2 then also wrote to. The First Committer Wins rule implies
-\* that T1 must have committed before T2 began.
-WWDependency(h, t1Id, t2Id) == 
-    \E op1 \in WritesByTxn(h, t1Id) :
-    \E op2 \in WritesByTxn(h, t2Id) :
-        /\ op1.key = op2.key
-        /\ CommitOp(h, t1Id).time < CommitOp(h, t2Id).time
-
-\* T1 wrote to a key that T2 then later read, after T1 committed.
-WRDependency(h, t1Id, t2Id) == 
-    \E op1 \in WritesByTxn(h, t1Id) :
-    \E op2 \in ReadsByTxn(h, t2Id) :
-        /\ op1.key = op2.key
-        /\ CommitOp(h, t1Id).time < BeginOp(h, t2Id).time   
-
-\* T1 read a key that T2 then later wrote to. T1 must start before T2 commits, since this implies that T1 read  
-\* a version of the key and T2 produced a later version of that ke, i.e. when it commits. T1, however, read 
-\* an earlier version of that key, because it started before T2 committed.
-RWDependency(h, t1Id, t2Id) == 
-    \E op1 \in ReadsByTxn(h, t1Id) :
-    \E op2 \in WritesByTxn(h, t2Id) :
-        /\ op1.key = op2.key
-        /\ BeginOp(h, t1Id).time < CommitOp(h, t2Id).time  \* T1 starts before T2 commits. This means that T1 read
-        \* For simplicity, we also only consider anti-dependencies to occur between
-        \* concurrent transactions. If I read a key and then some time later, a
-        \* non-concurrent transaction writes to that key, we don't worry about such a RW edge, since the later 
-        \* transaction won't be installing the "immediate successor" of that key's version.
-        \* This is formally discussed in Remark 2.1 of "Making Snapshot Isolation Serializable" 
-        \* (https://dsf.berkeley.edu/cs286/papers/ssi-tods2005.pdf)
-        /\ BeginOp(h, t2Id).time < CommitOp(h, t1Id).time
-
-\* Produces the serialization graph as defined above, for a given history. This graph is produced 
-\* by defining the appropriate set comprehension, where the produced set contains all the edges of the graph.
-SerializationGraph(history) == 
-    LET committedTxnIds == CommittedTxns(history) IN
-    {tedge \in (committedTxnIds \X committedTxnIds):
-        /\ tedge[1] /= tedge[2]
-        /\ \/ WWDependency(history, tedge[1], tedge[2])
-           \/ WRDependency(history, tedge[1], tedge[2])
-           \/ RWDependency(history, tedge[1], tedge[2])}
-
-        \* Returns the serialization graph with edge types.
-\* Output format: <<t1, t2, edgeType>>
-SerializationGraphWithEdgeTypes(history) == 
-    LET committedTxnIds == CommittedTxns(history) IN
-    {<<t1, t2, edgeType>> \in (committedTxnIds \X committedTxnIds \X {"WW", "WR", "RW"}):
-        /\ t1 /= t2
-        /\ \/ (edgeType = "WW" /\ WWDependency(history, t1, t2))
-           \/ (edgeType = "WR" /\ WRDependency(history, t1, t2))
-           \/ (edgeType = "RW" /\ RWDependency(history, t1, t2))}
-
-
-
 \* The key property to verify i.e. serializability of transaction histories.
 IsConflictSerializable(h) == ~IsCycle(SerializationGraph(h))
 
@@ -642,9 +702,9 @@ AllGnonadjacentContainHazardousRWEdge ==
 
 LargerGnonadjacentWitness == \A c \in AllCycles : ~(
     /\ IsGnonadjacentCycle(c) 
-    /\ Cardinality(c) = 3 
-    /\ Cardinality({e[1] : e \in c }) = 3 
-    /\ Cardinality(AllCycles) = 1
+    /\ Cardinality(c) = 4
+    /\ Cardinality({e[1] : e \in c }) = 4
+    \* /\ Cardinality(AllCycles) = 1
 )
 
 Test == 
@@ -1028,7 +1088,10 @@ Alias == [
     ccgraph |-> SerializationGraphWithCC(txnHistory),
     incomingEdges |-> incomingEdges,
     outgoingEdges |-> outgoingEdges,
-    canCommit |-> [txnId \in txnIds |-> TxnCanCommit(txnId, incomingEdges, outgoingEdges)]
+    canCommit |-> [txnId \in txnIds |-> TxnCanCommit(txnId, incomingEdges, outgoingEdges)],
+    incomingEdgeTypes |-> [txnId \in txnIds |-> IncomingEdgeTypes(incomingEdges, txnId)],
+    txnMustAbort |-> [txnId \in txnIds |-> TxnMustAbort(txnId, incomingEdges, outgoingEdges, txnHistory)],
+    ccgraphalt |-> SerializationGraphWithEdgeTypes(txnHistory)
 ]
 
 
