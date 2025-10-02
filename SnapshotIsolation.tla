@@ -340,43 +340,37 @@ IncomingEdgeTypes(incoming, txnId) == {edgeType \in {"WW", "WR", "RW"} : \E <<in
 
 
 \* Incoming edges for a transaction based on direct inspection of the global transaction history.
-IncomingEdgesGlobal(txnId, hist) == 
+IncomingEdgesFromHist(txnId, hist) == 
     {<<t1, t2, edgeType>> \in SerializationGraphWithEdgeTypes(hist) : t2 = txnId}
     
-OutgoingEdgesGlobal(txnId, hist) == 
+OutgoingEdgesFromHist(txnId, hist) == 
     {<<t1, t2, edgeType>> \in SerializationGraphWithEdgeTypes(hist) : t1 = txnId}
 
 TxnMustAbort(txnId, incoming, outgoing, hist) ==
-    \* If txnId has no incoming RW edges, and an outgoing hazardous RW edge, we must abort.
-    /\ \E <<t, outTxnId, edgeType>> \in OutgoingEdgesGlobal(txnId, hist) : 
+    \* 
+    \* Note that any dependency between transactions can be a "multi-edge" i.e.
+    \* there may be multiple edges of different dependency types between two
+    \* transactions. If this is the case, then we must abort specifically if
+    \* there exists an incoming edge that is strictly a non-RW edge. For
+    \* example, if we there is an incoming edge that is a multi-edge of {WW,
+    \* RW}, then we can allow this, since any cycle formed via this edge will
+    \* not be G-nonadjacent. If, however, there exists some incoming edge that
+    \* is strictly RW, and a different incoming edge that is strictly non-RW,
+    \* then we must abort.
+    \* 
+
+    \* Transaction has an outgoing RW edge.
+    /\ \E <<t, outTxnId, edgeType>> \in OutgoingEdgesFromHist(txnId, hist) : 
         /\ edgeType = "RW"
-        \* /\ CommitOp(txnHistory, txnId).time > CommitOp(txnHistory, outTxnId).time
-        \* Is hazardous RW edge.
+        \* Is hazardous RW edge, since other transaction has committed already.
         /\ \E op \in Range(hist) : op.txnId = outTxnId /\ op.type = "commit"
 
-    \* Note that any edge between transactions can be a "multi-edge" i.e. there may be multiple
-    \* edges of different dependency types between two transactions. If this is the case, then
-    \* we must abort specifically if there exists an incoming edge that is strictly a non-RW edge.
-    \* For example, if we there is an incoming edge that is a multi-edge of {WW, RW}, then 
-    \* we can allow this, since any cycle formed via this edge will not be G-nonadjacent. If,
-    \* however, there exists some incoming edge that is strictly RW, and a different incoming edge
-    \* that is strictly non-RW, then we must abort.
-
-    \* (a) there exists an incoming edge that is strictly non-RW.
-    /\ \E <<inTxnId, t, edgeType>> \in IncomingEdgesGlobal(txnId, hist) : 
+    \* Transaction has an incoming edge that is STRICTLY non-RW.
+    /\ \E <<inTxnId, t, edgeType>> \in IncomingEdgesFromHist(txnId, hist) : 
         /\ edgeType \in {"WW", "WR"}
-        /\ \A <<ti,tj,etype>> \in IncomingEdgesGlobal(txnId, hist) : ti = inTxnId => etype \in {"WW", "WR"}
+        \* Strictly non-RW condition.
+        /\ \A <<ti,tj,etype>> \in IncomingEdgesFromHist(txnId, hist) : (ti = inTxnId) => etype \in {"WW", "WR"}
 
-
-
-    \* There is not a distinct incoming edge the is RW.
-    \* /\ ~\E <<inTxnId, edgeType>> \in incoming[txnId] : 
-        \* /\ edgeType = "RW"
-
-
-    \* /\ \E <<outTxnId, edgeType>> \in outgoing[txnId] : 
-        \* /\ edgeType = "RW"
-        \* /\ ~\E <<nextOutTxnId, nextEdgeType>> \in outgoing[outTxnId] : nextEdgeType = "RW"
 
 \* Checks whether a given transaction is allowed to commit based on RW edge cycle prevention
 TxnCanCommit(txnId, incoming, outgoing) ==
