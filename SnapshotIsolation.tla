@@ -657,7 +657,9 @@ Cycles(V, E) ==
     \* LET cyclePaths == {p \in Path(V, E) : Len(p) > 1 /\ p[1][1] = p[Len(p)][2]} IN
     \* {{<<cpath[i],cpath[i+1]>> : i \in 1..(Len(cpath)-1)} : cpath \in cyclePaths}
 
-AllCycles == Cycles(txnIds, SerializationGraphWithEdgeTypes(txnHistory))
+
+
+AllCycles(sergraphWithEdges) == Cycles(txnIds, sergraphWithEdges)
 
 \* Given a set of edges which form a cycle, check whether this is a G-nonadjacent cycle.
 IsGnonadjacentCycle(cycleEdges) == 
@@ -674,8 +676,11 @@ IsGnonadjacentCycle(cycleEdges) ==
 HazardousRWEdge(e) == e[3] = "RW" /\ CommitOp(txnHistory, e[1]).time > CommitOp(txnHistory, e[2]).time
 BenignRWEdge(e) == e[3] = "RW" /\ CommitOp(txnHistory, e[1]).time < CommitOp(txnHistory, e[2]).time
 
+SerGraphWithEdgeTypes == SerializationGraphWithEdgeTypes(txnHistory)
+
 \* States that no G-nonadjacent cycles are possible.
-NoGnonadjacent == \A c \in AllCycles : ~IsGnonadjacentCycle(c)
+NoGnonadjacent == \A c \in AllCycles(SerGraphWithEdgeTypes) : ~IsGnonadjacentCycle(c)
+
 
 \* 
 \* Seems like we may actually want to state a slightly more accurate property which is something like,
@@ -687,17 +692,17 @@ NoGnonadjacent == \A c \in AllCycles : ~IsGnonadjacentCycle(c)
 \* e.g. this accounts for cases when we have something like both a WW and RW edge between two transactions,
 \* in a way that could form both a G-adjacent and G-nonadjacent cycle.
 \* 
-NoGnonadjacentGeneral == 
-    (\E c \in AllCycles : IsGnonadjacentCycle(c)) => 
-        \E c2 \in AllCycles : ~IsGnonadjacentCycle(c2)
+NoGnonadjacentStrict == 
+    (\E c \in AllCycles(SerGraphWithEdgeTypes) : IsGnonadjacentCycle(c)) => 
+        \E c2 \in AllCycles(SerGraphWithEdgeTypes) : ~IsGnonadjacentCycle(c2)
 
 \* States that all G-nonadjacent cycles contain at least one "hazardous" RW edge.
 AllGnonadjacentContainHazardousRWEdge == 
-    \A c \in AllCycles : IsGnonadjacentCycle(c) => (\E e \in c : HazardousRWEdge(e))
+    \A c \in AllCycles(SerGraphWithEdgeTypes) : IsGnonadjacentCycle(c) => (\E e \in c : HazardousRWEdge(e))
 
 \* WW -> RW (hazardous) edge pattern in G-nonadjacent cycles.
 AllGnonadjacentContainWWPrecedingHazardousRWEdge == 
-    \A c \in AllCycles : IsGnonadjacentCycle(c) => 
+    \A c \in AllCycles(SerGraphWithEdgeTypes) : IsGnonadjacentCycle(c) => 
         (\E ei,ej \in c : 
             /\ HazardousRWEdge(ej) 
             /\ ei[2] = ej[1] \* adjacent edges. 
@@ -705,7 +710,7 @@ AllGnonadjacentContainWWPrecedingHazardousRWEdge ==
 
 
 
-LargerGnonadjacentWitness == \A c \in AllCycles : ~(
+LargerGnonadjacentWitness == \A c \in AllCycles(SerGraphWithEdgeTypes) : ~(
     /\ IsGnonadjacentCycle(c) 
     /\ Cardinality(c) = 5
     /\ Cardinality({e[1] : e \in c }) = 5
@@ -716,7 +721,7 @@ Test ==
 \*     /\ TRUE
 \*     \* /\ PrintT(AllCycleNodes)
 \*     \* /\ PrintT(Path(txnIds, SerializationGraph(txnHistory)))
-    /\ PrintT(AllCycles)
+    /\ PrintT(AllCycles(SerGraphWithEdgeTypes))
 \*     /\ PrintT({IsGnonadjacentCycle(c) : c \in Cycles(txnIds, SerializationGraph(txnHistory))})
 
 
