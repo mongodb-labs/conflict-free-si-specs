@@ -695,13 +695,20 @@ NoGnonadjacentGeneral ==
 AllGnonadjacentContainHazardousRWEdge == 
     \A c \in AllCycles : IsGnonadjacentCycle(c) => (\E e \in c : HazardousRWEdge(e))
 
+\* WW -> RW (hazardous) edge pattern in G-nonadjacent cycles.
+AllGnonadjacentContainWWPrecedingHazardousRWEdge == 
+    \A c \in AllCycles : IsGnonadjacentCycle(c) => 
+        (\E ei,ej \in c : 
+            /\ HazardousRWEdge(ej) 
+            /\ ei[2] = ej[1] \* adjacent edges. 
+            /\ ei[3] = "WW")
 
 
 
 LargerGnonadjacentWitness == \A c \in AllCycles : ~(
     /\ IsGnonadjacentCycle(c) 
-    /\ Cardinality(c) = 4
-    /\ Cardinality({e[1] : e \in c }) = 4
+    /\ Cardinality(c) = 5
+    /\ Cardinality({e[1] : e \in c }) = 5
     \* /\ Cardinality(AllCycles) = 1
 )
 
