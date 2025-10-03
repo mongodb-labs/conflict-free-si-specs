@@ -367,11 +367,13 @@ TxnMustAbort(txnId, incoming, outgoing, hist) ==
         \* Is hazardous RW edge, since other transaction has committed already.
         /\ \E op \in Range(hist) : op.txnId = outTxnId /\ op.type = "commit"
 
-    \* Transaction has an incoming edge that is STRICTLY non-RW.
+    \* Transaction has an incoming edge that is STRICTLY non-RW (more refined version, just a strictly WW edge).
     /\ \E <<inTxnId, t, edgeType>> \in IncomingEdgesFromHist(txnId, hist) : 
-        /\ edgeType \in {"WW", "WR"}
+        \* QUESTION: Can this be only WW edges for detection here?
+        \* Yes, I believe this will work, via Corollary 2.3 that was added in the paper draft.
+        /\ edgeType \in {"WW"}
         \* Strictly non-RW condition.
-        /\ \A <<ti,tj,etype>> \in IncomingEdgesFromHist(txnId, hist) : (ti = inTxnId) => etype \in {"WW", "WR"}
+        /\ \A <<ti,tj,etype>> \in IncomingEdgesFromHist(txnId, hist) : (ti = inTxnId) => etype \in {"WW"}
 
 
 \* Checks whether a given transaction is allowed to commit based on RW edge cycle prevention
