@@ -343,10 +343,10 @@ IncomingEdgeTypes(incoming, txnId) == {edgeType \in {"WW", "WR", "RW"} : \E <<in
 
 \* Incoming edges for a transaction based on direct inspection of the global transaction history.
 IncomingEdgesFromHist(txnId, hist) == 
-    {<<t1, t2, edgeType>> \in SerializationGraphWithEdgeTypes(hist) : t2 = txnId}
+    {<<ti, tj, edgeType>> \in SerializationGraphWithEdgeTypes(hist) : tj = txnId}
     
 OutgoingEdgesFromHist(txnId, hist) == 
-    {<<t1, t2, edgeType>> \in SerializationGraphWithEdgeTypes(hist) : t1 = txnId}
+    {<<ti, tj, edgeType>> \in SerializationGraphWithEdgeTypes(hist) : ti = txnId}
 
 TxnMustAbort(txnId, incoming, outgoing, hist) ==
     \* 

@@ -92,12 +92,7 @@ txnGraph == SerializationGraph(txnHistory)
 allCommittedTxnIds == CommittedTxns(txnHistory)
 
 \* Alternate def of above.
-txnGraphWithEdgeTypes == 
-    {e \in (allCommittedTxnIds \X allCommittedTxnIds \X {"WW", "WR", "RW"}):
-        /\ e[1][1] /= e[1][2]
-        /\ \/ (e[2] = "WW" /\ WWDependency(txnHistory, e[1][1], e[1][2]))
-           \/ (e[2] = "WR" /\ WRDependency(txnHistory, e[1][1], e[1][2]))
-           \/ (e[2] = "RW" /\ RWDependency(txnHistory, e[1][1], e[1][2]))}
+txnGraphWithEdgeTypes == SerializationGraphWithEdgeTypes(txnHistory)
 txnGraphEdges == {<<e[1][1], e[1][2], e[2], IF AreConcurrent(txnHistory, e[1][1], e[1][2]) THEN "concurrent" ELSE "not_concurrent", IF HazardousRWEdge(<<e[1][1], e[1][2], "RW">>) THEN "hazardous" ELSE "benign">> : e \in txnGraphWithEdgeTypes}
 
 SerGraphElem == Group(<<DiGraph(txnIds,txnGraphEdges,[n \in txnIds |-> nodeAttrsFn(n)], [e \in txnGraphEdges |-> edgeAttrsFn(e)])>>, [transform |-> "translate(10, 140) scale(0.6)"])
