@@ -307,11 +307,11 @@ SerializationGraph(history) ==
 \* Output format: <<t1, t2, edgeType>>
 SerializationGraphWithEdgeTypes(history) == 
     LET committedTxnIds == CommittedTxns(history) IN
-    {<<t1, t2, edgeType>> \in (committedTxnIds \X committedTxnIds \X {"WW", "WR", "RW"}):
-        /\ t1 /= t2
-        /\ \/ (edgeType = "WW" /\ WWDependency(history, t1, t2))
-           \/ (edgeType = "WR" /\ WRDependency(history, t1, t2))
-           \/ (edgeType = "RW" /\ RWDependency(history, t1, t2))}
+    {<<ti, tj, edgeType>> \in (committedTxnIds \X committedTxnIds \X {"WW", "WR", "RW"}):
+        /\ ti /= tj
+        /\ \/ (edgeType = "WW" /\ WWDependency(history, ti, tj))
+           \/ (edgeType = "WR" /\ WRDependency(history, ti, tj))
+           \/ (edgeType = "RW" /\ RWDependency(history, ti, tj))}
 
 
 \* Checks whether a given transaction is allowed to commit, based on whether it conflicts
