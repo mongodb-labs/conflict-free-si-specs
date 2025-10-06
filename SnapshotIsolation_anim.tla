@@ -93,7 +93,7 @@ allCommittedTxnIds == CommittedTxns(txnHistory)
 
 \* Alternate def of above.
 txnGraphWithEdgeTypes == SerializationGraphWithEdgeTypes(txnHistory)
-txnGraphEdges == {<<e[1][1], e[1][2], e[2], IF AreConcurrent(txnHistory, e[1][1], e[1][2]) THEN "concurrent" ELSE "not_concurrent", IF HazardousRWEdge(<<e[1][1], e[1][2], "RW">>) THEN "hazardous" ELSE "benign">> : e \in txnGraphWithEdgeTypes}
+txnGraphEdges == {<<e[1], e[2], e[3], IF AreConcurrent(txnHistory, e[1], e[2]) THEN "concurrent" ELSE "not_concurrent", IF HazardousRWEdge(<<e[1], e[2], "RW">>) THEN "hazardous" ELSE "benign">> : e \in txnGraphWithEdgeTypes}
 
 SerGraphElem == Group(<<DiGraph(txnIds,txnGraphEdges,[n \in txnIds |-> nodeAttrsFn(n)], [e \in txnGraphEdges |-> edgeAttrsFn(e)])>>, [transform |-> "translate(10, 140) scale(0.6)"])
 
