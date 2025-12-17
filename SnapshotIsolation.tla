@@ -678,6 +678,8 @@ BenignRWEdge(e) == e[3] = "RW" /\ CommitOp(txnHistory, e[1]).time < CommitOp(txn
 
 SerGraphWithEdgeTypes == SerializationGraphWithEdgeTypes(txnHistory)
 
+LogSerGraphs == PrintT(SerGraphWithEdgeTypes)
+
 \* States that no G-nonadjacent cycles are possible.
 NoGnonadjacent == \A c \in AllCycles(SerGraphWithEdgeTypes) : ~IsGnonadjacentCycle(c)
 
