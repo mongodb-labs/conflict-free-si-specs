@@ -143,8 +143,8 @@ ReadsByTxn(h, txnId)  == {op \in Range(h) : op.txnId = txnId /\ op.type = "read"
 WritesByTxn(h, txnId) == {op \in Range(h) : op.txnId = txnId /\ op.type = "write"}
 
 \* The set of all keys read or written to by a given transaction.                   
-KeysReadByTxn(h, txnId)    == { op.key : op \in ReadsByTxn(txnHistory, txnId)}
-KeysWrittenByTxn(h, txnId) == { op.key : op \in WritesByTxn(txnHistory, txnId)}
+KeysReadByTxn(h, txnId)    == UNION { op.key : op \in ReadsByTxn(txnHistory, txnId)}
+KeysWrittenByTxn(h, txnId) == UNION { op.key : op \in WritesByTxn(txnHistory, txnId)}
 
 \* The index of a given operation in the transaction history sequence.
 IndexOfOp(h, op) == CHOOSE i \in DOMAIN h : h[i] = op
@@ -267,14 +267,14 @@ StartTxn(newTxnId) ==
 WWDependency(h, t1Id, t2Id) == 
     \E op1 \in WritesByTxn(h, t1Id) :
     \E op2 \in WritesByTxn(h, t2Id) :
-        /\ op1.key = op2.key
+        /\ op1.key \cap op2.key /= {}
         /\ CommitOp(h, t1Id).time < CommitOp(h, t2Id).time
 
 \* T1 wrote to a key that T2 then later read, after T1 committed.
 WRDependency(h, t1Id, t2Id) == 
     \E op1 \in WritesByTxn(h, t1Id) :
     \E op2 \in ReadsByTxn(h, t2Id) :
-        /\ op1.key = op2.key
+        /\ op1.key \cap op2.key /= {}
         /\ CommitOp(h, t1Id).time < BeginOp(h, t2Id).time   
 
 \* T1 read a key that T2 then later wrote to. T1 must start before T2 commits, since this implies that T1 read  
@@ -283,7 +283,7 @@ WRDependency(h, t1Id, t2Id) ==
 RWDependency(h, t1Id, t2Id) == 
     \E op1 \in ReadsByTxn(h, t1Id) :
     \E op2 \in WritesByTxn(h, t2Id) :
-        /\ op1.key = op2.key
+        /\ op1.key \cap op2.key /= {}
         /\ BeginOp(h, t1Id).time < CommitOp(h, t2Id).time  \* T1 starts before T2 commits. This means that T1 read
         \* For simplicity, we also only consider anti-dependencies to occur between
         \* concurrent transactions. If I read a key and then some time later, a
@@ -471,7 +471,8 @@ CommitTxn(txnId) ==
 
     \* /\ TxnCanCommit(txnId, incomingEdges', outgoingEdges')
     \* /\ TxnCanCommitWWConflict(txnId)
-    /\ ~TxnMustAbort(txnId, incomingEdges', outgoingEdges', txnHistory')
+
+    \* /\ ~TxnMustAbort(txnId, incomingEdges', outgoingEdges', txnHistory')
      
     \* Merge this transaction's updates into the data store. If the 
     \* transaction has updated a key, then we use its version as the new
@@ -513,14 +514,17 @@ AbortTxn(txnId) ==
 (* of generality.                                                                                 *)
 (**************************************************************************************************)
 
-TxnRead(txnId, k) == 
+TxnRead(txnId, ks) == 
     \* Read from this transaction's snapshot.
     \* Update the transaction's incoming and outgoing edges based on RW edge detection.
+    /\ ks /= {}
+    /\ Cardinality(KeysReadByTxn(txnHistory, txnId)) = 0 \* does reads only once.
+    \* Adds an edge to exactly one other transaction.
     /\ txnId \in RunningTxnIds
-    /\ LET valRead == txnSnapshots[txnId][k]
+    /\ LET valRead == txnSnapshots[txnId][CHOOSE k \in ks : TRUE]
            readOp == [ type  |-> "read", 
                        txnId |-> txnId, 
-                       key   |-> k, 
+                       key   |-> ks, 
                        val   |-> valRead]
            \* WR EDGE DETECTION
            \* Update the transactions's concurrent transactions set.
@@ -548,22 +552,24 @@ TxnRead(txnId, k) ==
            \* Update the global concurrent transactions mapping
            updatedConcurrentTxns == [concurrentTxns EXCEPT ![txnId] = updatedConcurrentSet]
        IN
-       /\ k \notin KeysReadByTxn(txnHistory, txnId)   
+       /\ \A k \in ks : k \notin KeysReadByTxn(txnHistory, txnId)   
        /\ txnHistory' = Append(txnHistory, readOp)
        /\ outgoingEdges' = updatedOutgoing
        /\ incomingEdges' = updatedIncoming
        /\ concurrentTxns' = updatedConcurrentTxns
        /\ UNCHANGED <<dataStore, clock, runningTxns, txnSnapshots>>
                    
-TxnUpdate(txnId, k, v) == 
+TxnUpdate(txnId, ks, v) == 
+    /\ ks /= {}
     /\ txnId \in RunningTxnIds
+    /\ Cardinality(KeysWrittenByTxn(txnHistory, txnId)) = 0 \* does writes only once.
     /\ LET writeOp == [ type  |-> "write", 
                         txnId |-> txnId, 
-                        key   |-> k, 
+                        key   |-> ks, 
                         val   |-> v] IN  
-        /\ k \notin KeysWrittenByTxn(txnHistory, txnId)
+        /\ \A k \in ks : k \notin KeysWrittenByTxn(txnHistory, txnId)
         \* We update the transaction's snapshot, not the actual data store.
-        /\ LET updatedSnapshot == [txnSnapshots[txnId] EXCEPT ![k] = v] IN
+        /\ LET updatedSnapshot == [k \in DOMAIN txnSnapshots[txnId] |-> IF k \in ks THEN v ELSE txnSnapshots[txnId][k]] IN
             txnSnapshots' = [txnSnapshots EXCEPT ![txnId] = updatedSnapshot]
         /\ txnHistory' = Append(txnHistory, writeOp)
         /\ UNCHANGED <<dataStore, runningTxns, clock, concurrentTxns, incomingEdges, outgoingEdges>>
@@ -586,10 +592,9 @@ Next ==
     \* Assumes that the given transaction is currently running.
     \/ \E tid \in txnIds : CommitTxn(tid)
     \/ \E tid \in txnIds : AbortTxn(tid)
-    \* Transaction reads or writes a key. We limit transactions
-    \* to only read or write the same key once.
-    \/ \E tid \in txnIds, k \in keys : TxnRead(tid, k)
-    \/ \E tid \in txnIds, k \in keys, v \in values : TxnUpdate(tid, k, v)
+    \* Transaction reads or writes a set of keys atomically
+    \/ \E tid \in txnIds, ks \in SUBSET keys : TxnRead(tid, ks)
+    \/ \E tid \in txnIds, ks \in SUBSET keys, v \in values : TxnUpdate(tid, ks, v)
     \/ (AllTxnsFinished /\ UNCHANGED vars)
 
 Spec == Init /\ [][Next]_vars /\ WF_vars(Next)
@@ -711,12 +716,14 @@ AllGnonadjacentContainWWPrecedingHazardousRWEdge ==
             /\ ei[3] = "WW")
 
 
+AllCyclesWithEdgeType ==  AllCycles(SerGraphWithEdgeTypes)
 
-LargerGnonadjacentWitness == \A c \in AllCycles(SerGraphWithEdgeTypes) : ~(
+\* Len(txnHistory) > 10
+LargerGnonadjacentWitness ==  Len(txnHistory) > 10 => ~\E c \in AllCyclesWithEdgeType : (
     /\ IsGnonadjacentCycle(c) 
-    /\ Cardinality(c) = 5
-    /\ Cardinality({e[1] : e \in c }) = 5
-    \* /\ Cardinality(AllCycles) = 1
+    /\ Cardinality(c) = 4
+    /\ Cardinality(UNION {{e[1], e[2]} : e \in c}) = 4
+    /\ Cardinality(SerGraphWithEdgeTypes) <= 6
 )
 
 Test == 
@@ -725,9 +732,6 @@ Test ==
 \*     \* /\ PrintT(Path(txnIds, SerializationGraph(txnHistory)))
     /\ PrintT(AllCycles(SerGraphWithEdgeTypes))
 \*     /\ PrintT({IsGnonadjacentCycle(c) : c \in Cycles(txnIds, SerializationGraph(txnHistory))})
-
-
-
 
 \* Examples of each dependency type.
 HistWW == << [type |-> "begin"  , txnId |-> 0 , time |-> 0],
@@ -1103,7 +1107,9 @@ Alias == [
     canCommit |-> [txnId \in txnIds |-> TxnCanCommit(txnId, incomingEdges, outgoingEdges)],
     incomingEdgeTypes |-> [txnId \in txnIds |-> IncomingEdgeTypes(incomingEdges, txnId)],
     txnMustAbort |-> [txnId \in txnIds |-> TxnMustAbort(txnId, incomingEdges, outgoingEdges, txnHistory)],
-    ccgraphalt |-> SerializationGraphWithEdgeTypes(txnHistory)
+    ccgraphalt |-> SerializationGraphWithEdgeTypes(txnHistory),
+    ccgraphaltcard |-> Cardinality(SerializationGraphWithEdgeTypes(txnHistory)),
+    totalKeysRW |->  [t \in txnIds |-> Cardinality(KeysReadByTxn(txnHistory, t)) + Cardinality(KeysWrittenByTxn(txnHistory, t))]
 ]
 
 
@@ -1111,6 +1117,11 @@ Alias == [
 -------------------------------------------------
 
 \* Some model checking details.
+
+MaxTotalKeysRW == 3
+StateConstraint ==  
+    /\ \A t \in txnIds : Cardinality(KeysReadByTxn(txnHistory, t)) + Cardinality(KeysWrittenByTxn(txnHistory, t)) <= MaxTotalKeysRW
+
 
 Symmetry == Permutations(keys) \cup Permutations(values) \cup Permutations(txnIds)
 
